@@ -151,7 +151,14 @@ func GetMaxGPA(isWeighted bool) float64 {
 	}
 
 	if isWeighted {
+		if len(scoreMappings.Weighted) == 0 {
+			return math.NaN()
+		}
 		return scoreMappings.Weighted[0].GPA // First entry is highest
+	}
+
+	if len(scoreMappings.NonWeighted) == 0 {
+		return math.NaN()
 	}
 	return scoreMappings.NonWeighted[0].GPA
 }

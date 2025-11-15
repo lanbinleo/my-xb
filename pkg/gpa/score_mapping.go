@@ -16,7 +16,7 @@ type ScoreMapping struct {
 // ScoreMappingData contains all score mappings
 type ScoreMappingData struct {
 	Weighted    []ScoreMapping `json:"weighted"`
-	NonWeighted []ScoreMapping `json:"non_weighted"`
+	NonWeighted []ScoreMapping `json:"non-weighted"`
 }
 
 var scoreMappings *ScoreMappingData
