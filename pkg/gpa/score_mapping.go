@@ -7,9 +7,9 @@ import (
 
 // ScoreMapping represents a score-to-GPA mapping entry
 type ScoreMapping struct {
-	MinValue float64 `json:"min_value"`
-	MaxValue float64 `json:"max_value"`
-	Level    string  `json:"level"`
+	MinValue float64 `json:"minValue"`
+	MaxValue float64 `json:"maxValue"`
+	Level    string  `json:"displayName"`
 	GPA      float64 `json:"gpa"`
 }
 
