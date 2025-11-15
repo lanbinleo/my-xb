@@ -1,6 +1,8 @@
-# MyXB - Xiaobao Grade Viewer
+# my-xb
 
-A command-line tool for viewing grades and calculating GPA from the school's Xiaobao system.
+A command-line tool for viewing grades and calculating GPA from the [Tsinglan School Xiaobao](https://tsinglanstudent.schoolis.cn/) system.
+
+This project is a refactor project of [tls-xb](https://github.com/hey2022/tls-xb), written in golang. Claude Code is using in this project, AI generated code appears.
 
 ## Features
 
@@ -95,13 +97,7 @@ See `GPA_CALCULATION.md` for detailed methodology.
 
 ### Weighted Courses
 
-The following courses use weighted GPA scale (max 4.8):
-- AP courses
-- A Level courses
-- AS courses
-- Linear Algebra
-- Modern Physics and Optics
-- Multivariable Calculus
+AP & A Level courses, and hard courses (linear algebra, modern physics and optics, multivariable calculus) use weighted scale (max 4.8).
 
 All other courses use non-weighted scale (max 4.3).
 
@@ -120,17 +116,6 @@ The config file contains:
 ```
 
 To reset credentials, delete this file or run `myxb login` again.
-
-## API Documentation
-
-See `API_DOCUMENTATION.md` for detailed API endpoint information.
-
-## Development
-
-### Prerequisites
-
-- Go 1.20 or higher
-- `score_mapping.json` file in the same directory as the executable
 
 ### Building
 
