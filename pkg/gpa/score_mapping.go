@@ -87,6 +87,11 @@ func IsWeightedSubject(subjectName string) bool {
 		return true
 	}
 
+	// AP courses
+	if contains(subjectName, "AP") {
+		return true
+	}
+
 	return false
 }
 
