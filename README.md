@@ -4,10 +4,12 @@ A command-line tool for viewing grades and calculating GPA from the school's Xia
 
 ## Features
 
-- Login to Xiaobao with automatic cookie management
-- View semester information
-- List subjects and courses
-- Calculate GPA (coming soon)
+- Login to Xiaobao with automatic credential storage
+- Calculate weighted and unweighted GPA
+- View detailed subject scores and grades
+- Compare calculated GPA with official GPA
+- Support for AP, A Level, and AS weighted courses
+- Automatic elective course detection
 
 ## Installation
 
@@ -17,62 +19,118 @@ go build -o myxb ./cmd/myxb
 
 ## Usage
 
-### Interactive Mode
+### First Time Setup
 
-Run the program without arguments to enter interactive mode:
+Login and save your credentials:
+
+```bash
+./myxb login
+```
+
+You will be prompted to enter your username, password, and captcha (if required).
+Credentials are securely stored in your home directory (~/.myxb/config.json).
+
+### Calculate GPA
+
+After logging in, simply run:
 
 ```bash
 ./myxb
 ```
 
-You will be prompted to enter your username, password, and captcha (if required).
+This will:
+- Authenticate using saved credentials
+- Fetch your current semester grades
+- Calculate weighted and unweighted GPA
+- Display detailed subject information
+- Compare with official GPA (if published)
 
-### Command-Line Mode
+### Commands
 
-Provide credentials as command-line arguments:
-
-```bash
-./myxb -user YOUR_USERNAME -pass YOUR_PASSWORD
-```
-
-### Options
-
-- `-user` - Username for login
-- `-pass` - Password for login
+- `myxb` - Calculate GPA (default command)
+- `myxb login` - Login and save credentials
+- `myxb help` - Show help message
 
 ## Project Structure
 
 ```
 myxb/
-├── cmd/myxb/          # Main application entry point
+├── cmd/myxb/          # Main application
+│   ├── main.go        # Entry point and command routing
+│   ├── login.go       # Login handlers
+│   ├── gpa.go         # GPA calculation command
+│   └── colors.go      # Terminal color utilities
 ├── internal/
 │   ├── api/           # API client methods
-│   ├── auth/          # Authentication logic
+│   ├── auth/          # Password hashing
 │   ├── client/        # HTTP client with cookie management
+│   ├── config/        # Credential storage
 │   └── models/        # Data structures
-└── pkg/gpa/           # GPA calculation (coming soon)
+└── pkg/gpa/           # GPA calculation logic
+    ├── calculator.go  # Core GPA calculator
+    └── score_mapping.go # Score to GPA mapping
 ```
 
-## Authentication
+## How It Works
 
-The program uses double MD5 hashing for password security:
+### Authentication
 
-1. First hash: MD5(password)
-2. Second hash: MD5(hash1 + timestamp)
+1. Passwords are hashed using double MD5:
+   - First hash: MD5(password)
+   - Second hash: MD5(hash1 + timestamp)
+2. First hash is stored locally for automatic login
+3. Session cookies are managed automatically
 
-All requests after login automatically include session cookies.
+### GPA Calculation
+
+1. Fetches all subjects for current semester
+2. Retrieves evaluation projects and scores for each subject
+3. Adjusts proportions to account for incomplete assignments
+4. Calculates subject total score (0-100)
+5. Converts score to GPA using weighted/non-weighted mapping
+6. Applies course weights (electives: 0.5, regular: 1.0)
+7. Computes weighted average GPA
+
+See `GPA_CALCULATION.md` for detailed methodology.
+
+### Weighted Courses
+
+The following courses use weighted GPA scale (max 4.8):
+- AP courses
+- A Level courses
+- AS courses
+- Linear Algebra
+- Modern Physics and Optics
+- Multivariable Calculus
+
+All other courses use non-weighted scale (max 4.3).
+
+## Configuration
+
+Credentials are stored in:
+- Windows: `%USERPROFILE%\.myxb\config.json`
+- Linux/Mac: `~/.myxb/config.json`
+
+The config file contains:
+```json
+{
+  "username": "your_username",
+  "password_hash": "MD5_HASH_OF_PASSWORD"
+}
+```
+
+To reset credentials, delete this file or run `myxb login` again.
 
 ## API Documentation
 
 See `API_DOCUMENTATION.md` for detailed API endpoint information.
-
-See `GPA_CALCULATION.md` for GPA calculation methodology.
 
 ## Development
 
 ### Prerequisites
 
 - Go 1.20 or higher
+- `score_mapping.json` file in the same directory as the executable
 
 ### Building
 
