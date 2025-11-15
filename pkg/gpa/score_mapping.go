@@ -1,8 +1,8 @@
 package gpa
 
 import (
+	_ "embed"
 	"encoding/json"
-	"os"
 )
 
 // ScoreMapping represents a score-to-GPA mapping entry
@@ -19,22 +19,36 @@ type ScoreMappingData struct {
 	NonWeighted []ScoreMapping `json:"non-weighted"`
 }
 
+// CourseClassification contains lists of weighted and unweighted courses
+type CourseClassification struct {
+	Weighted   []string `json:"weighted"`
+	Unweighted []string `json:"unweighted"`
+}
+
+//go:embed score_mapping.json
+var scoreMappingJSON []byte
+
+//go:embed course_classification.json
+var courseClassificationJSON []byte
+
 var scoreMappings *ScoreMappingData
+var courseClassification *CourseClassification
 
-// LoadScoreMappings loads the score mapping from a JSON file
-func LoadScoreMappings(filepath string) error {
-	data, err := os.ReadFile(filepath)
-	if err != nil {
-		return err
-	}
-
+// init automatically loads embedded data when package is imported
+func init() {
+	// Load score mappings
 	var mappings ScoreMappingData
-	if err := json.Unmarshal(data, &mappings); err != nil {
-		return err
+	if err := json.Unmarshal(scoreMappingJSON, &mappings); err != nil {
+		panic("failed to load embedded score_mapping.json: " + err.Error())
 	}
-
 	scoreMappings = &mappings
-	return nil
+
+	// Load course classification
+	var classification CourseClassification
+	if err := json.Unmarshal(courseClassificationJSON, &classification); err != nil {
+		panic("failed to load embedded course_classification.json: " + err.Error())
+	}
+	courseClassification = &classification
 }
 
 // GetScoreMappings returns the loaded score mappings
@@ -44,32 +58,33 @@ func GetScoreMappings() *ScoreMappingData {
 
 // IsWeightedSubject determines if a subject uses weighted GPA
 func IsWeightedSubject(subjectName string) bool {
-	// AP courses
-	if contains(subjectName, "AP") {
-		return true
+	if courseClassification == nil {
+		return false
 	}
 
+	// First, check explicit unweighted list (highest priority)
+	for _, course := range courseClassification.Unweighted {
+		if subjectName == course {
+			return false
+		}
+	}
+
+	// Second, check explicit weighted list
+	for _, course := range courseClassification.Weighted {
+		if subjectName == course {
+			return true
+		}
+	}
+
+	// Fallback to keyword matching
 	// A Level courses
 	if contains(subjectName, "A Level") {
 		return true
 	}
 
-	// AS courses
-	if contains(subjectName, "AS") {
+	// AS courses (but not "AS" alone, must be "AS " with space)
+	if contains(subjectName, "AS ") {
 		return true
-	}
-
-	// Specific advanced courses
-	extraWeightedSubjects := []string{
-		"Linear Algebra",
-		"Modern Physics and Optics",
-		"Multivariable Calculus",
-	}
-
-	for _, subject := range extraWeightedSubjects {
-		if subjectName == subject {
-			return true
-		}
 	}
 
 	return false
