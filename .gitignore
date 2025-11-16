@@ -18,7 +18,6 @@ vendor/
 go.work
 
 # Build output
-myxb
 myxb.exe
 
 # IDE
