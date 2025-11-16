@@ -33,9 +33,9 @@ jobs:
         run: |
           mkdir -p dist
 
-          # 构造输出文件名
-          OUT="dist/myxb_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}"
-          
+          # 构造输出文件名（不包含版本号）
+          OUT="dist/myxb_${{ matrix.goos }}_${{ matrix.goarch }}"
+
           # Windows 需要加入 .exe
           if [ "${{ matrix.goos }}" = "windows" ]; then
             OUT="${OUT}.exe"
@@ -43,8 +43,9 @@ jobs:
 
           echo "Building ${OUT}"
 
+          # 使用 ldflags 注入版本号（去掉 v 前缀）
           GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
-          go build -o "$OUT" ./cmd/myxb
+          go build -ldflags "-X main.version=${VERSION#v}" -o "$OUT" ./cmd/myxb
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
