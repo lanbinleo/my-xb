@@ -21,6 +21,8 @@ func main() {
 	switch command {
 	case "login":
 		runLogin()
+	case "logout":
+		runLogout()
 	case "help", "-h", "--help":
 		printHelp()
 	default:
@@ -35,6 +37,7 @@ func printHelp() {
 	fmt.Println("Usage:")
 	fmt.Println("  myxb           Calculate GPA (requires login)")
 	fmt.Println("  myxb login     Login to save credentials")
+	fmt.Println("  myxb logout    Clear saved credentials")
 	fmt.Println("  myxb help      Show this help message")
 	fmt.Println()
 }
@@ -130,4 +133,27 @@ func runLogin() {
 
 	fmt.Println()
 	printInfo("You can now run 'myxb' to calculate your GPA")
+}
+
+func runLogout() {
+	printBanner(version)
+
+	// Check if there are saved credentials
+	cfg, err := config.Load()
+	if err != nil || cfg == nil {
+		printWarning("No saved credentials found")
+		os.Exit(0)
+	}
+
+	// Delete the config file
+	if err := config.Delete(); err != nil {
+		printError(fmt.Sprintf("Failed to delete credentials: %v", err))
+		os.Exit(1)
+	}
+
+	printSuccess("Credentials cleared!")
+	configPath, _ := config.GetConfigPath()
+	fmt.Println(gray(fmt.Sprintf(" - Config file removed: %s", configPath)))
+	fmt.Println()
+	printInfo("Run 'myxb login' to login again")
 }
