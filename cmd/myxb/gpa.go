@@ -94,18 +94,12 @@ func calculateGPA(apiClient *api.API) {
 
 	// Get semester dynamic scores to identify which subjects count toward GPA
 	printInfo("Fetching semester-wide scores...")
-	semesterScores, err := apiClient.GetSemesterDynamicScore(selectedSemester.ID)
-	if err != nil {
-		printWarning(fmt.Sprintf("Failed to get semester scores: %v", err))
-		semesterScores = nil
-	}
+	semesterScores, _ := apiClient.GetSemesterDynamicScore(selectedSemester.ID)
 
 	// Create a map for quick lookup
 	semesterScoreMap := make(map[uint64]*models.SubjectDynamicScore)
-	if semesterScores != nil {
-		for i := range semesterScores {
-			semesterScoreMap[semesterScores[i].SubjectID] = &semesterScores[i]
-		}
+	for i := range semesterScores {
+		semesterScoreMap[semesterScores[i].SubjectID] = &semesterScores[i]
 	}
 
 	// Process each subject

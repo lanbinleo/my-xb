@@ -81,9 +81,7 @@ func performLoginWithCaptcha(apiClient *api.API, username string, loginFn loginF
 
 func saveCaptcha(base64Data string) (string, error) {
 	// Remove the data URL prefix if present
-	if strings.HasPrefix(base64Data, "data:image/png;base64,") {
-		base64Data = strings.TrimPrefix(base64Data, "data:image/png;base64,")
-	}
+	base64Data = strings.TrimPrefix(base64Data, "data:image/png;base64,")
 
 	// Decode base64
 	imgData, err := base64.StdEncoding.DecodeString(base64Data)
