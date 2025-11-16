@@ -25,9 +25,25 @@ func getCredentials() (string, string) {
 	return user, pass
 }
 
-func performLogin(apiClient *api.API, username, password string) error {
-	// printInfo("Fetching captcha...")
+// loginFunc is a function type that performs the actual login API call
+type loginFunc func(username, captchaCode string) error
 
+func performLogin(apiClient *api.API, username, password string) error {
+	loginFn := func(user, captcha string) error {
+		return apiClient.Login(user, password, captcha)
+	}
+	return performLoginWithCaptcha(apiClient, username, loginFn, true)
+}
+
+func performLoginWithHash(apiClient *api.API, username, passwordHash string) error {
+	loginFn := func(user, captcha string) error {
+		return apiClient.LoginWithPasswordHash(user, passwordHash, captcha)
+	}
+	return performLoginWithCaptcha(apiClient, username, loginFn, false)
+}
+
+// performLoginWithCaptcha handles the common login flow with captcha handling
+func performLoginWithCaptcha(apiClient *api.API, username string, loginFn loginFunc, allowInteractiveCaptcha bool) error {
 	captchaResp, err := apiClient.GetCaptcha()
 	if err != nil {
 		return fmt.Errorf("failed to get captcha: %w", err)
@@ -36,6 +52,11 @@ func performLogin(apiClient *api.API, username, password string) error {
 	var captchaCode string
 
 	if captchaResp.Data != "" {
+		if !allowInteractiveCaptcha {
+			// For auto-login with saved credentials, we can't handle captcha interactively
+			return fmt.Errorf("captcha required, please run 'myxb login' again")
+		}
+
 		// Save captcha image to temp file
 		captchaPath, err := saveCaptcha(captchaResp.Data)
 		if err != nil {
@@ -51,32 +72,11 @@ func performLogin(apiClient *api.API, username, password string) error {
 		captchaCode, _ = reader.ReadString('\n')
 		captchaCode = strings.TrimSpace(captchaCode)
 	} else {
-		// printInfo("No captcha required")
 		captchaCode = ""
 	}
 
 	printInfo("Logging in...")
-	return apiClient.Login(username, password, captchaCode)
-}
-
-func performLoginWithHash(apiClient *api.API, username, passwordHash string) error {
-	// printInfo("Fetching captcha...")
-
-	captchaResp, err := apiClient.GetCaptcha()
-	if err != nil {
-		return fmt.Errorf("failed to get captcha: %w", err)
-	}
-
-	var captchaCode string
-
-	if captchaResp.Data != "" {
-		// For auto-login with saved credentials, we can't handle captcha interactively
-		// User needs to login again manually
-		return fmt.Errorf("captcha required, please run 'myxb login' again")
-	}
-
-	printInfo("Logging in...")
-	return apiClient.LoginWithPasswordHash(username, passwordHash, captchaCode)
+	return loginFn(username, captchaCode)
 }
 
 func saveCaptcha(base64Data string) (string, error) {
