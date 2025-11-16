@@ -5,6 +5,11 @@ import (
 	"myxb/internal/models"
 )
 
+const (
+	// HumanitiesCourseName is the special course name that is treated as elective
+	HumanitiesCourseName = "C-Humanities"
+)
+
 // Subject represents a subject with calculated scores and GPA
 type Subject struct {
 	ID                uint64
@@ -33,8 +38,14 @@ type CalculatedGPA struct {
 	Subjects         []Subject
 }
 
-// AdjustProportions adjusts evaluation project proportions to sum to 100%
+// AdjustProportions adjusts evaluation project proportions to sum to the target proportion
+// For top-level projects, targetProportion should be 100.0
 func AdjustProportions(projects []models.EvaluationProject) {
+	adjustProportionsRecursive(projects, 100.0)
+}
+
+// adjustProportionsRecursive recursively adjusts proportions at all levels
+func adjustProportionsRecursive(projects []models.EvaluationProject, targetProportion float64) {
 	// Calculate total proportion of valid (non-null score) projects
 	totalProportion := 0.0
 	for _, p := range projects {
@@ -47,71 +58,28 @@ func AdjustProportions(projects []models.EvaluationProject) {
 		return
 	}
 
-	// Adjust proportions
+	// Adjust proportions to sum to targetProportion
 	for i := range projects {
 		if !projects[i].ScoreIsNull {
-			projects[i].Proportion = projects[i].Proportion / totalProportion * 100.0
+			projects[i].Proportion = projects[i].Proportion / totalProportion * targetProportion
 		}
-	}
 
-	// Recursively adjust nested projects
-	for i := range projects {
+		// Recursively adjust nested projects
 		if len(projects[i].EvaluationProjectList) > 0 {
-			AdjustNestedProportions(projects[i].EvaluationProjectList, projects[i].Proportion)
+			adjustProportionsRecursive(projects[i].EvaluationProjectList, projects[i].Proportion)
 		}
 	}
 }
 
-// AdjustNestedProportions adjusts nested evaluation projects
-func AdjustNestedProportions(projects []models.EvaluationProject, parentProportion float64) {
-	totalProportion := 0.0
-	for _, p := range projects {
-		if !p.ScoreIsNull {
-			totalProportion += p.Proportion
-		}
-	}
-
-	if totalProportion == 0 {
-		return
-	}
-
-	for i := range projects {
-		if !projects[i].ScoreIsNull {
-			projects[i].Proportion = projects[i].Proportion / totalProportion * parentProportion
-		}
-
-		// Recursively adjust deeper nested projects
-		if len(projects[i].EvaluationProjectList) > 0 {
-			AdjustNestedProportions(projects[i].EvaluationProjectList, projects[i].Proportion)
-		}
-	}
-}
-
-// CalculateSubjectScore calculates the total score for a subject
+// CalculateSubjectScore calculates the total score for a subject recursively
 func CalculateSubjectScore(projects []models.EvaluationProject) float64 {
 	totalScore := 0.0
 
 	for _, project := range projects {
 		if !project.ScoreIsNull {
-			// If has nested projects, calculate from them
+			// If has nested projects, recursively calculate from them
 			if len(project.EvaluationProjectList) > 0 {
-				totalScore += calculateNestedScore(project.EvaluationProjectList)
-			} else {
-				totalScore += project.Score * project.Proportion / 100.0
-			}
-		}
-	}
-
-	return totalScore
-}
-
-func calculateNestedScore(projects []models.EvaluationProject) float64 {
-	totalScore := 0.0
-
-	for _, project := range projects {
-		if !project.ScoreIsNull {
-			if len(project.EvaluationProjectList) > 0 {
-				totalScore += calculateNestedScore(project.EvaluationProjectList)
+				totalScore += CalculateSubjectScore(project.EvaluationProjectList)
 			} else {
 				totalScore += project.Score * project.Proportion / 100.0
 			}
@@ -219,7 +187,7 @@ func ProcessSubject(detail *models.SubjectDetail, dynamicScore *models.DynamicSc
 	}
 
 	// Set elective weight
-	if isElective || detail.SubjectName == "C-Humanities" {
+	if isElective || detail.SubjectName == HumanitiesCourseName {
 		subject.Weight = 0.5
 		subject.IsElective = true
 	}
