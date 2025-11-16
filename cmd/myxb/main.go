@@ -1,0 +1,136 @@
+package main
+
+import (
+	"fmt"
+	"myxb/internal/api"
+	"myxb/internal/client"
+	"myxb/internal/config"
+	"os"
+)
+
+var version = "1.0.0"
+
+func main() {
+	// Parse command
+	args := os.Args[1:]
+	command := ""
+	if len(args) > 0 {
+		command = args[0]
+	}
+
+	switch command {
+	case "login":
+		runLogin()
+	case "help", "-h", "--help":
+		printHelp()
+	default:
+		// Default: run GPA calculation
+		runGPA()
+	}
+}
+
+func printHelp() {
+	printBanner(version)
+
+	fmt.Println("Usage:")
+	fmt.Println("  myxb           Calculate GPA (requires login)")
+	fmt.Println("  myxb login     Login to save credentials")
+	fmt.Println("  myxb help      Show this help message")
+	fmt.Println()
+}
+
+func ensureLogin() (*api.API, error) {
+	// Check if already logged in
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load config: %w", err)
+	}
+
+	if cfg != nil {
+		printInfo(fmt.Sprintf("Using saved credentials for: %s", cyan(cfg.Username)))
+
+		// Create HTTP client
+		httpClient, err := client.New()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create HTTP client: %w", err)
+		}
+
+		apiClient := api.New(httpClient)
+
+		// Try to login with saved credentials
+		// We need to hash the already-hashed password one more time
+		if err := performLoginWithHash(apiClient, cfg.Username, cfg.PasswordHash); err != nil {
+			printWarning("Saved credentials failed, please login again")
+			config.Delete()
+			return nil, fmt.Errorf("authentication failed")
+		}
+
+		return apiClient, nil
+	}
+
+	return nil, fmt.Errorf("not logged in")
+}
+
+func runGPA() {
+	printBanner(version)
+
+	apiClient, err := ensureLogin()
+	if err != nil {
+		// Show banner when not logged in
+		printBanner(version)
+
+		printError("You need to login first")
+		fmt.Println()
+		printInfo("Run: myxb login")
+		os.Exit(1)
+	}
+
+	printSuccess("Authentication successful!")
+	fmt.Println()
+
+	calculateGPA(apiClient)
+}
+
+func runLogin() {
+	printBanner(version)
+
+	fmt.Println("Your credentials will be saved " + bold(cyan("locally")) + " for future use.")
+	fmt.Println()
+
+	// Create HTTP client
+	httpClient, err := client.New()
+	if err != nil {
+		printError(fmt.Sprintf("Failed to create HTTP client: %v", err))
+		os.Exit(1)
+	}
+
+	apiClient := api.New(httpClient)
+
+	// Get credentials
+	username, password := getCredentials()
+
+	// Login
+	if err := performLogin(apiClient, username, password); err != nil {
+		printError(fmt.Sprintf("Login failed: %v", err))
+		os.Exit(1)
+	}
+
+	printSuccess("Login successful!")
+
+	// Save credentials
+	cfg := &config.Config{
+		Username:     username,
+		PasswordHash: config.HashPassword(password),
+	}
+
+	if err := config.Save(cfg); err != nil {
+		printWarning(fmt.Sprintf("Failed to save credentials: %v", err))
+	} else {
+		printSuccess("Credentials saved!")
+		configPath, _ := config.GetConfigPath()
+		fmt.Println(gray(fmt.Sprintf(" - Config saved to: %s", configPath)))
+	}
+
+	fmt.Println()
+	printInfo("You can now run 'myxb' to calculate your GPA")
+}
