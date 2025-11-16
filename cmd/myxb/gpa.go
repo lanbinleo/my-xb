@@ -266,10 +266,11 @@ func printSubjectTable(subject gpa.Subject) {
 		typeStr += " Elective"
 	}
 
+	scoreLevel := getScoreLevel(subject)
 	t.AppendRow(table.Row{
-		colorizeByScoreLevel(subject.Name, getScoreLevel(subject.EvaluationDetails)),
+		colorizeByScoreLevel(subject.Name, scoreLevel),
 		scoreStr,
-		getScoreLevel(subject.EvaluationDetails),
+		scoreLevel,
 		fmt.Sprintf("%.2f", subject.GPA),
 		typeStr,
 	})
@@ -280,7 +281,7 @@ func printSubjectTable(subject gpa.Subject) {
 			continue
 		}
 
-		addEvaluationProjectRows(t, &evalProject, "", true)
+		addEvaluationProjectRows(t, &evalProject, "", true, subject.IsWeighted)
 	}
 
 	fmt.Println(t.Render())
@@ -288,7 +289,7 @@ func printSubjectTable(subject gpa.Subject) {
 }
 
 // addEvaluationProjectRows recursively adds evaluation project rows to the table
-func addEvaluationProjectRows(t table.Writer, evalProject *models.EvaluationProject, indent string, showTasks bool) {
+func addEvaluationProjectRows(t table.Writer, evalProject *models.EvaluationProject, indent string, showTasks bool, isWeighted bool) {
 	// Add the evaluation project row
 	name := indent + evalProject.EvaluationProjectEName
 	proportionStr := fmt.Sprintf("%.2f%%", evalProject.Proportion)
@@ -314,7 +315,7 @@ func addEvaluationProjectRows(t table.Writer, evalProject *models.EvaluationProj
 			weight := evalProject.Proportion / float64(len(tasksWithScores))
 			for _, task := range tasksWithScores {
 				score := *task.Score / task.TotalScore * 100.0
-				scoreLevel := getScoreLevelFromScore(score, evalProject.ScoreLevel)
+				scoreLevel := gpa.GetScoreLevelFromScore(score, isWeighted)
 
 				t.AppendRow(table.Row{
 					colorizeByScoreLevel(indent+"- "+task.Name, scoreLevel),
@@ -332,52 +333,12 @@ func addEvaluationProjectRows(t table.Writer, evalProject *models.EvaluationProj
 		if nestedProject.ScoreIsNull {
 			continue
 		}
-		addEvaluationProjectRows(t, &nestedProject, indent+"- ", showTasks)
+		addEvaluationProjectRows(t, &nestedProject, indent+"- ", showTasks, isWeighted)
 	}
 }
 
-// getScoreLevel gets the score level from evaluation projects (returns the first non-empty one)
-func getScoreLevel(projects []models.EvaluationProject) string {
-	for _, p := range projects {
-		if !p.ScoreIsNull && p.ScoreLevel != "" {
-			return p.ScoreLevel
-		}
-	}
-	return ""
-}
-
-// getScoreLevelFromScore attempts to derive score level from score percentage
-// This is a fallback - ideally the API should provide this
-func getScoreLevelFromScore(score float64, defaultLevel string) string {
-	// If we have a default level, use it
-	if defaultLevel != "" {
-		return defaultLevel
-	}
-
-	// Simple mapping based on common grade boundaries
-	if score >= 93 {
-		return "A+"
-	} else if score >= 90 {
-		return "A"
-	} else if score >= 87 {
-		return "A-"
-	} else if score >= 83 {
-		return "B+"
-	} else if score >= 80 {
-		return "B"
-	} else if score >= 77 {
-		return "B-"
-	} else if score >= 73 {
-		return "C+"
-	} else if score >= 70 {
-		return "C"
-	} else if score >= 67 {
-		return "C-"
-	} else if score >= 63 {
-		return "D+"
-	} else if score >= 60 {
-		return "D"
-	} else {
-		return "F"
-	}
+// getScoreLevel gets the score level from a subject's evaluation projects
+func getScoreLevel(subject gpa.Subject) string {
+	// Use the subject's score and weighted status to get the accurate level
+	return gpa.GetScoreLevelFromScore(subject.Score, subject.IsWeighted)
 }
