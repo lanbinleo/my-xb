@@ -87,7 +87,15 @@ jobs:
           body: |
             ## Installation
 
-            Download the appropriate binary for your platform below.
+            Download the appropriate binary for your platform:
+
+            | Operating System | Architecture | File to Download |
+            |-----------------|--------------|------------------|
+            | Windows (64-bit) | x86_64 | `myxb_*_windows_amd64.exe` |
+            | macOS (Intel) | x86_64 | `myxb_*_darwin_amd64` |
+            | macOS (Apple Silicon) | ARM64 (M1/M2/M3/M4) | `myxb_*_darwin_arm64` |
+            | Linux (64-bit) | x86_64 | `myxb_*_linux_amd64` |
+            | Linux (ARM64) | ARM64 | `myxb_*_linux_arm64` |
 
             ### Verify checksums
             ```bash
