@@ -19,6 +19,36 @@ func New(c *client.Client) *API {
 	return &API{client: c}
 }
 
+// Error code constants
+const (
+	ErrCodeInvalidCaptcha     = 1180038
+	ErrCodeInvalidCredentials = 13
+	ErrCodeAuthFailed         = 1010076
+)
+
+// checkAPIResponse checks the generic API response state and returns an error if state != 0
+func checkAPIResponse(state int, msg string) error {
+	if state != 0 {
+		return fmt.Errorf("API error: %s", msg)
+	}
+	return nil
+}
+
+// checkLoginResponse checks the login response state and returns a specific error message
+func checkLoginResponse(state int, msg string) error {
+	if state != 0 {
+		switch state {
+		case ErrCodeInvalidCaptcha:
+			return fmt.Errorf("incorrect captcha")
+		case ErrCodeInvalidCredentials, ErrCodeAuthFailed:
+			return fmt.Errorf("incorrect username or password")
+		default:
+			return fmt.Errorf("login failed: %s", msg)
+		}
+	}
+	return nil
+}
+
 // GetCaptcha retrieves the login captcha
 func (a *API) GetCaptcha() (*models.CaptchaResponse, error) {
 	var resp models.CaptchaResponse
@@ -27,8 +57,8 @@ func (a *API) GetCaptcha() (*models.CaptchaResponse, error) {
 		return nil, err
 	}
 
-	if resp.State != 0 {
-		return nil, fmt.Errorf("API error: %s", resp.Msg)
+	if err := checkAPIResponse(resp.State, resp.Msg); err != nil {
+		return nil, err
 	}
 
 	return &resp, nil
@@ -55,18 +85,7 @@ func (a *API) Login(username, password, captcha string) error {
 		return err
 	}
 
-	if resp.State != 0 {
-		switch resp.State {
-		case 1180038:
-			return fmt.Errorf("incorrect captcha")
-		case 13, 1010076:
-			return fmt.Errorf("incorrect username or password")
-		default:
-			return fmt.Errorf("login failed: %s", resp.Msg)
-		}
-	}
-
-	return nil
+	return checkLoginResponse(resp.State, resp.Msg)
 }
 
 // LoginWithPasswordHash performs login with an already-hashed password (first MD5 only)
@@ -92,18 +111,7 @@ func (a *API) LoginWithPasswordHash(username, passwordHash, captcha string) erro
 		return err
 	}
 
-	if resp.State != 0 {
-		switch resp.State {
-		case 1180038:
-			return fmt.Errorf("incorrect captcha")
-		case 13, 1010076:
-			return fmt.Errorf("incorrect username or password")
-		default:
-			return fmt.Errorf("login failed: %s", resp.Msg)
-		}
-	}
-
-	return nil
+	return checkLoginResponse(resp.State, resp.Msg)
 }
 
 // GetSemesters retrieves the list of semesters
@@ -114,8 +122,8 @@ func (a *API) GetSemesters() ([]models.Semester, error) {
 		return nil, err
 	}
 
-	if resp.State != 0 {
-		return nil, fmt.Errorf("API error: %s", resp.Msg)
+	if err := checkAPIResponse(resp.State, resp.Msg); err != nil {
+		return nil, err
 	}
 
 	return resp.Data, nil
@@ -133,8 +141,8 @@ func (a *API) GetSubjectList(semesterID uint64) ([]models.SubjectSimple, error) 
 		return nil, err
 	}
 
-	if resp.State != 0 {
-		return nil, fmt.Errorf("API error: %s", resp.Msg)
+	if err := checkAPIResponse(resp.State, resp.Msg); err != nil {
+		return nil, err
 	}
 
 	// Deduplicate subjects by ID
@@ -165,8 +173,8 @@ func (a *API) GetTaskList(semesterID, subjectID uint64) ([]models.TaskItem, erro
 		return nil, err
 	}
 
-	if resp.State != 0 {
-		return nil, fmt.Errorf("API error: %s", resp.Msg)
+	if err := checkAPIResponse(resp.State, resp.Msg); err != nil {
+		return nil, err
 	}
 
 	return resp.Data.List, nil
@@ -184,8 +192,8 @@ func (a *API) GetTaskDetail(taskID uint64) (*models.SubjectDetail, error) {
 		return nil, err
 	}
 
-	if resp.State != 0 {
-		return nil, fmt.Errorf("API error: %s", resp.Msg)
+	if err := checkAPIResponse(resp.State, resp.Msg); err != nil {
+		return nil, err
 	}
 
 	return &resp.Data, nil
@@ -205,8 +213,8 @@ func (a *API) GetDynamicScoreDetail(classID, subjectID, semesterID uint64) (*mod
 		return nil, err
 	}
 
-	if resp.State != 0 {
-		return nil, fmt.Errorf("API error: %s", resp.Msg)
+	if err := checkAPIResponse(resp.State, resp.Msg); err != nil {
+		return nil, err
 	}
 
 	return &resp.Data, nil
@@ -224,8 +232,8 @@ func (a *API) GetSemesterDynamicScore(semesterID uint64) ([]models.SubjectDynami
 		return nil, err
 	}
 
-	if resp.State != 0 {
-		return nil, fmt.Errorf("API error: %s", resp.Msg)
+	if err := checkAPIResponse(resp.State, resp.Msg); err != nil {
+		return nil, err
 	}
 
 	return resp.Data.StudentSemesterDynamicScoreBasicDtos, nil
@@ -243,8 +251,8 @@ func (a *API) GetGPA(semesterID uint64) (*float64, error) {
 		return nil, err
 	}
 
-	if resp.State != 0 {
-		return nil, fmt.Errorf("API error: %s", resp.Msg)
+	if err := checkAPIResponse(resp.State, resp.Msg); err != nil {
+		return nil, err
 	}
 
 	// Data can be null if GPA not published
