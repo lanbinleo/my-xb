@@ -176,24 +176,50 @@ func calculateGPA(apiClient *api.API) {
 	fmt.Println("----------------------------------------------")
 
 	if !math.IsNaN(result.WeightedGPA) {
-		fmt.Printf("%s %.2f %s\n",
+		fmt.Printf("%s %.2f / %.2f %s\n",
 			bold("Weighted GPA:"),
 			result.WeightedGPA,
-			gray(fmt.Sprintf("(max: %.1f)", result.MaxGPA)))
+			result.MaxGPA,
+			gray(fmt.Sprintf("(%.1f%%)", result.WeightedGPA/result.MaxGPA*100)))
 
-		fmt.Printf("%s %.2f %s\n",
+		fmt.Printf("%s %.2f / %.2f %s\n",
 			bold("Unweighted GPA:"),
 			result.UnweightedGPA,
-			gray(fmt.Sprintf("(max: %.1f)", result.UnweightedMaxGPA)))
+			result.UnweightedMaxGPA,
+			gray(fmt.Sprintf("(%.1f%%)", result.UnweightedGPA/result.UnweightedMaxGPA*100)))
 
 		fmt.Println()
 
 		// Get official GPA for comparison
 		officialGPA, err := apiClient.GetGPA(selectedSemester.ID)
 		if err == nil && officialGPA != nil {
-			fmt.Printf("%s %.2f\n",
-				bold("Official GPA:"),
-				*officialGPA)
+			diff := *officialGPA - result.WeightedGPA
+			if diff != 0 {
+				sign := "+"
+				color := green
+				if diff < 0 {
+					sign = ""
+					color = red
+				}
+				diffStr := color(fmt.Sprintf("(%s%.2f Compare To Calculated GPA)", sign, diff))
+				fmt.Printf("%s %.2f %s\n",
+					bold("Official GPA:"),
+					*officialGPA,
+					diffStr)
+
+				// Please Report This to Developers
+				fmt.Printf("\n%s%.2f%s\n%s\n%s\n%s\n",
+					bold("Hi! We found a discrepancy in your GPA calculation for "),
+					diff,
+					bold(" points. "),
+					"This may caused by special courses that's are "+yellow("(not) weighted or (not) counted")+" toward GPA. ",
+					"Please report this to the developers so we can improve the accuracy of GPA calculations. ",
+					"Thank you!")
+			} else {
+				fmt.Printf("%s %.2f\n",
+					bold("Official GPA:"),
+					*officialGPA)
+			}
 		} else if err == nil {
 			fmt.Println(gray("Official GPA not yet published"))
 		}
