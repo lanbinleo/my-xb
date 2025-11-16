@@ -193,15 +193,16 @@ func calculateGPA(apiClient *api.API) {
 		// Get official GPA for comparison
 		officialGPA, err := apiClient.GetGPA(selectedSemester.ID)
 		if err == nil && officialGPA != nil {
-			diff := *officialGPA - result.WeightedGPA
-			if diff != 0 {
+			diff := result.WeightedGPA - *officialGPA
+			// Use a small tolerance (0.01) to account for floating-point precision
+			if math.Abs(diff) > 0.01 {
 				sign := "+"
-				color := green
+				color := red
 				if diff < 0 {
 					sign = ""
-					color = red
+					color = green
 				}
-				diffStr := color(fmt.Sprintf("(%s%.2f Compare To Calculated GPA)", sign, diff))
+				diffStr := color(fmt.Sprintf("(%s%.2f)", sign, diff))
 				fmt.Printf("%s %.2f %s\n",
 					bold("Official GPA:"),
 					*officialGPA,
@@ -209,11 +210,11 @@ func calculateGPA(apiClient *api.API) {
 
 				// Please Report This to Developers
 				fmt.Printf("\n%s%.2f%s\n%s\n%s\n%s\n",
-					bold("Hi! We found a discrepancy in your GPA calculation for "),
+					bold("Hi! We found a discrepancy of "),
 					diff,
-					bold(" points. "),
-					"This may caused by special courses that's are "+yellow("(not) weighted or (not) counted")+" toward GPA. ",
-					"Please report this to the developers so we can improve the accuracy of GPA calculations. ",
+					bold(" points in the GPA calculation."),
+					"This may be caused by special courses that are "+yellow("weighted differently or excluded")+" from official GPA calculation.",
+					"Please report this to the developers so we can improve the accuracy.",
 					"Thank you!")
 			} else {
 				fmt.Printf("%s %.2f\n",
