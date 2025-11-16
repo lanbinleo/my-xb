@@ -10,6 +10,14 @@ import (
 	"strings"
 )
 
+const (
+	// MaxDisplaySemesters is the maximum number of semesters to display in the list
+	MaxDisplaySemesters = 10
+
+	// ElectiveCourseKeyword is used to identify elective courses
+	ElectiveCourseKeyword = "Ele"
+)
+
 func calculateGPA(apiClient *api.API) {
 	// Get semesters
 	printInfo("Fetching semesters...")
@@ -21,11 +29,11 @@ func calculateGPA(apiClient *api.API) {
 
 	fmt.Println()
 
-	// Display semester list (reversed, latest at bottom, max 10)
+	// Display semester list (reversed, latest at bottom)
 	var currentIndex int = -1
 	displayCount := len(semesters)
-	if displayCount > 10 {
-		displayCount = 10
+	if displayCount > MaxDisplaySemesters {
+		displayCount = MaxDisplaySemesters
 	}
 
 	// Display in reverse order
@@ -134,7 +142,7 @@ func calculateGPA(apiClient *api.API) {
 		dynamicInfo := semesterScoreMap[subject.ID]
 
 		// Determine if elective (simplified - we'll mark manually if needed)
-		isElective := strings.Contains(subject.Name, "Ele")
+		isElective := strings.Contains(subject.Name, ElectiveCourseKeyword)
 
 		// Process subject
 		calcSubject := gpa.ProcessSubject(detail, dynamicScore, dynamicInfo, isElective)
