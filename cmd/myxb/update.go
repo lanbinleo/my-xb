@@ -17,165 +17,162 @@ const (
 	githubRepo  = "my-xb"
 )
 
-// runUpdate 执行更新操作
-func runUpdate(silentCheck bool) {
-	if !silentCheck {
-		printInfo("正在检查更新...")
-		fmt.Println()
-	}
+// versionInfo contains version check results
+type versionInfo struct {
+	Latest  *selfupdate.Release
+	Current semver.Version
+	HasNew  bool
+}
 
+// getLatestVersion checks for the latest version and returns version information
+func getLatestVersion() (*versionInfo, error) {
 	latest, found, err := selfupdate.DetectLatest(fmt.Sprintf("%s/%s", githubOwner, githubRepo))
 	if err != nil {
-		if !silentCheck {
-			printError(fmt.Sprintf("检查更新失败: %v", err))
-		}
-		return
+		return nil, fmt.Errorf("failed to check for updates: %w", err)
 	}
 
-	currentVersion := version
-	// 移除可能的 v 前缀
-	currentVersion = strings.TrimPrefix(currentVersion, "v")
-
+	currentVersion := strings.TrimPrefix(version, "v")
 	current, err := semver.Parse(currentVersion)
 	if err != nil {
-		if !silentCheck {
-			printError(fmt.Sprintf("解析当前版本号失败: %v", err))
-		}
-		return
+		return nil, fmt.Errorf("failed to parse current version: %w", err)
 	}
 
-	if !found || latest.Version.LTE(current) {
-		if !silentCheck {
-			printSuccess("已是最新版本!")
-			fmt.Println(gray(fmt.Sprintf("  当前版本: %s", currentVersion)))
-		}
-		return
-	}
+	hasNew := found && latest.Version.GT(current)
 
-	if silentCheck {
-		// 静默检查只显示提示信息
-		return
-	}
+	return &versionInfo{
+		Latest:  latest,
+		Current: current,
+		HasNew:  hasNew,
+	}, nil
+}
 
-	// 显示更新信息
-	fmt.Println(green("✓") + " 发现新版本!")
-	fmt.Println(gray(fmt.Sprintf("  当前版本: %s", currentVersion)))
-	fmt.Println(gray(fmt.Sprintf("  最新版本: %s", latest.Version)))
+// runUpdate performs the update operation
+func runUpdate() {
+	printInfo("Checking for updates...")
 	fmt.Println()
 
-	// 执行更新
-	printInfo("正在下载更新...")
+	verInfo, err := getLatestVersion()
+	if err != nil {
+		printError(err.Error())
+		return
+	}
+
+	if !verInfo.HasNew {
+		printSuccess("Already up to date!")
+		fmt.Println(gray(fmt.Sprintf("  Current version: %s", verInfo.Current)))
+		return
+	}
+
+	// Display update information
+	fmt.Println(green("✓") + " New version available!")
+	fmt.Println(gray(fmt.Sprintf("  Current version: %s", verInfo.Current)))
+	fmt.Println(gray(fmt.Sprintf("  Latest version:  %s", verInfo.Latest.Version)))
+	fmt.Println()
+
+	// Perform update
+	printInfo("Downloading update...")
 
 	exe, err := os.Executable()
 	if err != nil {
-		printError(fmt.Sprintf("获取程序路径失败: %v", err))
+		printError(fmt.Sprintf("Failed to get executable path: %v", err))
 		return
 	}
 
-	if err := selfupdate.UpdateTo(latest.AssetURL, exe); err != nil {
-		// 如果是 Windows，可能需要特殊处理
+	if err := selfupdate.UpdateTo(verInfo.Latest.AssetURL, exe); err != nil {
+		// Special handling for Windows
 		if runtime.GOOS == "windows" {
-			printWarning("无法直接替换文件，尝试使用批处理脚本更新...")
-			if err := updateOnWindows(latest.AssetURL, exe); err != nil {
-				printError(fmt.Sprintf("更新失败: %v", err))
+			printWarning("Cannot replace file directly, trying batch script update...")
+			if err := updateOnWindows(verInfo.Latest.AssetURL, exe); err != nil {
+				printError(fmt.Sprintf("Update failed: %v", err))
 				fmt.Println()
-				printInfo("请手动下载最新版本:")
-				fmt.Println(gray(fmt.Sprintf("  %s", latest.AssetURL)))
+				printInfo("Please download the latest version manually:")
+				fmt.Println(gray(fmt.Sprintf("  %s", verInfo.Latest.AssetURL)))
 			}
 		} else {
-			printError(fmt.Sprintf("更新失败: %v", err))
+			printError(fmt.Sprintf("Update failed: %v", err))
 			fmt.Println()
-			printInfo("请手动下载最新版本:")
-			fmt.Println(gray(fmt.Sprintf("  %s", latest.AssetURL)))
+			printInfo("Please download the latest version manually:")
+			fmt.Println(gray(fmt.Sprintf("  %s", verInfo.Latest.AssetURL)))
 		}
 		return
 	}
 
-	printSuccess("更新完成!")
-	fmt.Println(gray(fmt.Sprintf("  版本: %s → %s", currentVersion, latest.Version)))
+	printSuccess("Update completed!")
+	fmt.Println(gray(fmt.Sprintf("  Version: %s → %s", verInfo.Current, verInfo.Latest.Version)))
 	fmt.Println()
-	printInfo("请重新运行程序以使用新版本")
+	printInfo("Please restart the program to use the new version")
 }
 
-// updateOnWindows 在 Windows 上使用批处理脚本进行更新
+// updateOnWindows performs update on Windows using a batch script
 func updateOnWindows(assetURL, exePath string) error {
-	// 下载新版本到临时文件
+	// Download new version to temporary file
 	newExePath := exePath + ".new.exe"
 	if err := selfupdate.UpdateTo(assetURL, newExePath); err != nil {
-		return fmt.Errorf("下载新版本失败: %w", err)
+		return fmt.Errorf("failed to download new version: %w", err)
 	}
 
-	// 创建批处理脚本
+	// Create batch script
+	// Use ping for delay, waiting for main program to exit
+	// Use start /b to asynchronously delete the script itself
 	batContent := fmt.Sprintf(`@echo off
-echo 正在更新 MyXB...
-timeout /t 2 /nobreak >nul
+echo Updating MyXB...
+ping 127.0.0.1 -n 3 >nul
 move /y "%s" "%s"
 if errorlevel 1 (
     echo.
-    echo 更新失败！
-    echo 请手动替换文件:
-    echo   新版本: %s
-    echo   目标位置: %s
+    echo Update failed!
+    echo Please replace the file manually:
+    echo   New version: %s
+    echo   Target location: %s
     pause
 ) else (
     echo.
-    echo 更新完成！
-    echo 您可以重新运行程序了。
+    echo Update completed!
+    echo You can now restart the program.
     timeout /t 3
 )
-del "%%~f0"
+start /b cmd /c del "%%~f0"
 `, newExePath, exePath, newExePath, exePath)
 
-	// 保存批处理脚本到临时目录
+	// Save batch script to temporary directory
 	batPath := filepath.Join(os.TempDir(), "myxb_update.bat")
 	if err := os.WriteFile(batPath, []byte(batContent), 0644); err != nil {
 		os.Remove(newExePath)
-		return fmt.Errorf("创建批处理脚本失败: %w", err)
+		return fmt.Errorf("failed to create batch script: %w", err)
 	}
 
-	// 启动批处理脚本
+	// Start batch script
 	cmd := exec.Command("cmd", "/C", "start", "/min", batPath)
 	if err := cmd.Start(); err != nil {
 		os.Remove(newExePath)
 		os.Remove(batPath)
-		return fmt.Errorf("启动批处理脚本失败: %w", err)
+		return fmt.Errorf("failed to start batch script: %w", err)
 	}
 
-	printSuccess("批处理脚本已启动")
-	fmt.Println(gray("  程序将在几秒后自动更新..."))
+	printSuccess("Batch script started")
+	fmt.Println(gray("  Program will be updated in a few seconds..."))
 	fmt.Println()
 
-	// 立即退出当前程序
+	// Exit current program immediately
 	os.Exit(0)
 	return nil
 }
 
-// checkForUpdates 检查是否有可用更新（仅提示，不执行更新）
+// checkForUpdates checks if an update is available (notification only, does not perform update)
 func checkForUpdates() {
-	// 静默检查更新
-	latest, found, err := selfupdate.DetectLatest(fmt.Sprintf("%s/%s", githubOwner, githubRepo))
+	verInfo, err := getLatestVersion()
 	if err != nil {
-		// 静默失败，不显示错误
+		// Silent failure, do not display error
 		return
 	}
 
-	currentVersion := version
-	// 移除可能的 v 前缀
-	currentVersion = strings.TrimPrefix(currentVersion, "v")
-
-	current, err := semver.Parse(currentVersion)
-	if err != nil {
-		// 静默失败，不显示错误
+	if !verInfo.HasNew {
+		// Already up to date, do not display any message
 		return
 	}
 
-	if !found || latest.Version.LTE(current) {
-		// 已是最新版本，不显示任何信息
-		return
-	}
-
-	// 发现新版本，显示提示
+	// New version found, display notification
 	fmt.Println()
-	printInfo(fmt.Sprintf("发现新版本 %s 可用！", cyan("v"+latest.Version.String())))
-	fmt.Println(gray(fmt.Sprintf("  运行 '%s' 来更新", cyan("myxb update"))))
+	printInfo(fmt.Sprintf("New version %s available!", cyan("v"+verInfo.Latest.Version.String())))
+	fmt.Println(gray(fmt.Sprintf("  Run '%s' to update", cyan("myxb update"))))
 }
