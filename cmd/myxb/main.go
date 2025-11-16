@@ -11,7 +11,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-var version = "1.0.0"
+var version = "1.0.2"
 
 func main() {
 	cmd := &cli.Command{
@@ -39,10 +39,33 @@ func main() {
 					return nil
 				},
 			},
+			{
+				Name:  "update",
+				Usage: "Check for updates and update to the latest version",
+				Action: func(ctx context.Context, c *cli.Command) error {
+					runUpdate(false)
+					return nil
+				},
+			},
 		},
 		Before: func(ctx context.Context, c *cli.Command) (context.Context, error) {
 			printBanner(version)
 			return ctx, nil
+		},
+		After: func(ctx context.Context, c *cli.Command) error {
+			// 自动检查更新（仅在非 update 命令时）
+			// 检查命令行参数，如果包含 "update" 则跳过自动检查
+			isUpdateCommand := false
+			for _, arg := range os.Args {
+				if arg == "update" {
+					isUpdateCommand = true
+					break
+				}
+			}
+			if !isUpdateCommand {
+				checkForUpdates()
+			}
+			return nil
 		},
 	}
 
