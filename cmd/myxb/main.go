@@ -11,23 +11,11 @@ import (
 var version = "1.0.0"
 
 func main() {
-	// Parse command and flags
+	// Parse command
 	args := os.Args[1:]
 	command := ""
-	showTasks := false
-
-	// Parse flags
-	filteredArgs := []string{}
-	for _, arg := range args {
-		if arg == "-t" || arg == "--tasks" {
-			showTasks = true
-		} else {
-			filteredArgs = append(filteredArgs, arg)
-		}
-	}
-
-	if len(filteredArgs) > 0 {
-		command = filteredArgs[0]
+	if len(args) > 0 {
+		command = args[0]
 	}
 
 	switch command {
@@ -38,8 +26,8 @@ func main() {
 	case "help", "-h", "--help":
 		printHelp()
 	default:
-		// Default: run GPA calculation
-		runGPA(showTasks)
+		// Default: run GPA calculation with table output
+		runGPA()
 	}
 }
 
@@ -47,8 +35,7 @@ func printHelp() {
 	printBanner(version)
 
 	fmt.Println("Usage:")
-	fmt.Println("  myxb           Calculate GPA (requires login)")
-	fmt.Println("  myxb -t        Show detailed task breakdown for each subject")
+	fmt.Println("  myxb           Calculate GPA with detailed breakdown")
 	fmt.Println("  myxb login     Login to save credentials")
 	fmt.Println("  myxb logout    Clear saved credentials")
 	fmt.Println("  myxb help      Show this help message")
@@ -87,7 +74,7 @@ func ensureLogin() (*api.API, error) {
 	return nil, fmt.Errorf("not logged in")
 }
 
-func runGPA(showTasks bool) {
+func runGPA() {
 	printBanner(version)
 
 	apiClient, err := ensureLogin()
@@ -101,7 +88,7 @@ func runGPA(showTasks bool) {
 	printSuccess("Authentication successful!")
 	fmt.Println()
 
-	calculateGPA(apiClient, showTasks)
+	calculateGPA(apiClient)
 }
 
 func runLogin() {

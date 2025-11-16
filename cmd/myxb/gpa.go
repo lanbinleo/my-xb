@@ -20,7 +20,7 @@ const (
 	ElectiveCourseKeyword = "Ele"
 )
 
-func calculateGPA(apiClient *api.API, showTasks bool) {
+func calculateGPA(apiClient *api.API) {
 	// Get semesters
 	printInfo("Fetching semesters...")
 	semesters, err := apiClient.GetSemesters()
@@ -107,75 +107,42 @@ func calculateGPA(apiClient *api.API, showTasks bool) {
 	// Process each subject
 	calculatedSubjects := []gpa.Subject{}
 
-	printInfo("Calculating scores for each subject...")
+	printInfo("Fetching scores for each subject...")
 	fmt.Println()
 
-	for i, subject := range subjects {
-		fmt.Printf("  %s Processing %s...\n", gray(fmt.Sprintf("[%d/%d]", i+1, len(subjects))), cyan(subject.Name))
-
+	for _, subject := range subjects {
 		// Get task list
 		tasks, err := apiClient.GetTaskList(selectedSemester.ID, subject.ID)
 		if err != nil || len(tasks) == 0 {
-			printWarning(fmt.Sprintf("    No tasks found for %s", subject.Name))
 			continue
 		}
 
 		// Get task detail
 		detail, err := apiClient.GetTaskDetail(tasks[0].ID)
 		if err != nil {
-			printWarning(fmt.Sprintf("    Failed to get task detail: %v", err))
 			continue
 		}
 
 		// Get dynamic score detail
 		dynamicScore, err := apiClient.GetDynamicScoreDetail(detail.ClassID, subject.ID, selectedSemester.ID)
 		if err != nil {
-			printWarning(fmt.Sprintf("    Failed to get dynamic score: %v", err))
 			continue
 		}
 
 		// Get semester dynamic info for this subject
 		dynamicInfo := semesterScoreMap[subject.ID]
 
-		// Determine if elective (simplified - we'll mark manually if needed)
+		// Determine if elective
 		isElective := strings.Contains(subject.Name, ElectiveCourseKeyword)
 
 		// Process subject
 		calcSubject := gpa.ProcessSubject(detail, dynamicScore, dynamicInfo, isElective)
 		calculatedSubjects = append(calculatedSubjects, calcSubject)
-
-		// Display subject info
-		scoreStr := fmt.Sprintf("%.1f", calcSubject.Score)
-		if calcSubject.OfficialScore != nil && calcSubject.ExtraCredit != 0 {
-			scoreStr += gray(fmt.Sprintf(" (official: %.1f, extra: +%.1f)", *calcSubject.OfficialScore, calcSubject.ExtraCredit))
-		}
-
-		gpaStr := fmt.Sprintf("%.2f", calcSubject.GPA)
-		if !calcSubject.IsInGrade {
-			gpaStr += gray(" (not in GPA)")
-		}
-
-		typeStr := "Regular"
-		if calcSubject.IsWeighted {
-			typeStr = "Weighted"
-		}
-		if calcSubject.IsElective {
-			typeStr += " Elective"
-		}
-
-		fmt.Printf("    Score: %s | GPA: %s | Type: %s\n",
-			green(scoreStr), cyan(gpaStr), gray(typeStr))
 	}
 
-	fmt.Println()
-
-	// If showTasks is true, print detailed tables for each subject
-	if showTasks {
-		printInfo("Generating detailed task breakdown...")
-		fmt.Println()
-		for _, subject := range calculatedSubjects {
-			printSubjectTable(subject)
-		}
+	// Print detailed tables for each subject
+	for _, subject := range calculatedSubjects {
+		printSubjectTable(subject)
 	}
 
 	// Calculate final GPA
