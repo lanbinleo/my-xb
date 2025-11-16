@@ -31,8 +31,8 @@ func New() (*Client, error) {
 	}, nil
 }
 
-// Get performs a GET request
-func (c *Client) Get(endpoint string, queryParams map[string]string) ([]byte, error) {
+// buildURL constructs a URL with query parameters
+func (c *Client) buildURL(endpoint string, queryParams map[string]string) (*url.URL, error) {
 	u, err := url.Parse(c.baseURL + endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL: %w", err)
@@ -44,6 +44,16 @@ func (c *Client) Get(endpoint string, queryParams map[string]string) ([]byte, er
 			q.Set(k, v)
 		}
 		u.RawQuery = q.Encode()
+	}
+
+	return u, nil
+}
+
+// Get performs a GET request
+func (c *Client) Get(endpoint string, queryParams map[string]string) ([]byte, error) {
+	u, err := c.buildURL(endpoint, queryParams)
+	if err != nil {
+		return nil, err
 	}
 
 	resp, err := c.httpClient.Get(u.String())
@@ -57,17 +67,9 @@ func (c *Client) Get(endpoint string, queryParams map[string]string) ([]byte, er
 
 // Post performs a POST request with JSON body
 func (c *Client) Post(endpoint string, queryParams map[string]string, body interface{}) ([]byte, error) {
-	u, err := url.Parse(c.baseURL + endpoint)
+	u, err := c.buildURL(endpoint, queryParams)
 	if err != nil {
-		return nil, fmt.Errorf("invalid URL: %w", err)
-	}
-
-	if queryParams != nil {
-		q := u.Query()
-		for k, v := range queryParams {
-			q.Set(k, v)
-		}
-		u.RawQuery = q.Encode()
+		return nil, err
 	}
 
 	jsonData, err := json.Marshal(body)
