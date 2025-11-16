@@ -76,9 +76,6 @@ func runGPA() {
 
 	apiClient, err := ensureLogin()
 	if err != nil {
-		// Show banner when not logged in
-		printBanner(version)
-
 		printError("You need to login first")
 		fmt.Println()
 		printInfo("Run: myxb login")
