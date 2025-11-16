@@ -3,6 +3,7 @@ package gpa
 import (
 	_ "embed"
 	"encoding/json"
+	"strings"
 )
 
 // ScoreMapping represents a score-to-GPA mapping entry
@@ -78,42 +79,19 @@ func IsWeightedSubject(subjectName string) bool {
 
 	// Fallback to keyword matching
 	// A Level courses
-	if contains(subjectName, "A Level") {
+	if strings.Contains(subjectName, "A Level") {
 		return true
 	}
 
 	// AS courses (but not "AS" alone, must be "AS " with space)
-	if contains(subjectName, "AS ") {
+	if strings.Contains(subjectName, "AS ") {
 		return true
 	}
 
 	// AP courses
-	if contains(subjectName, "AP") {
+	if strings.Contains(subjectName, "AP") {
 		return true
 	}
 
-	return false
-}
-
-func contains(str, substr string) bool {
-	return len(str) >= len(substr) && (str == substr ||
-		(len(str) > len(substr) &&
-			(hasPrefix(str, substr) || hasSuffix(str, substr) || hasInfix(str, substr))))
-}
-
-func hasPrefix(str, prefix string) bool {
-	return len(str) >= len(prefix) && str[:len(prefix)] == prefix
-}
-
-func hasSuffix(str, suffix string) bool {
-	return len(str) >= len(suffix) && str[len(str)-len(suffix):] == suffix
-}
-
-func hasInfix(str, infix string) bool {
-	for i := 0; i <= len(str)-len(infix); i++ {
-		if str[i:i+len(infix)] == infix {
-			return true
-		}
-	}
 	return false
 }
