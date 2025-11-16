@@ -1,13 +1,11 @@
 package api
 
 import (
-	"crypto/md5"
 	"fmt"
 	"myxb/internal/auth"
 	"myxb/internal/client"
 	"myxb/internal/models"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -76,9 +74,7 @@ func (a *API) LoginWithPasswordHash(username, passwordHash, captcha string) erro
 	timestamp := uint64(time.Now().Unix())
 
 	// Apply second MD5 hash with timestamp
-	combined := passwordHash + strconv.FormatUint(timestamp, 10)
-	hash := md5.Sum([]byte(combined))
-	finalHash := strings.ToUpper(fmt.Sprintf("%X", hash))
+	finalHash := auth.SecondHash(passwordHash, timestamp)
 
 	loginReq := models.LoginRequest{
 		Name:      username,

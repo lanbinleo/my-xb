@@ -1,12 +1,10 @@
 package config
 
 import (
-	"crypto/md5"
 	"encoding/json"
-	"fmt"
+	"myxb/internal/auth"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 // Config represents the user configuration
@@ -70,8 +68,7 @@ func Save(config *Config) error {
 
 // HashPassword returns MD5 hash of the password (first hash only, for storage)
 func HashPassword(password string) string {
-	hash := md5.Sum([]byte(password))
-	return strings.ToUpper(fmt.Sprintf("%X", hash))
+	return auth.FirstHash(password)
 }
 
 // Delete removes the configuration file
