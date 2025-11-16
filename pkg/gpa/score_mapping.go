@@ -95,3 +95,23 @@ func IsWeightedSubject(subjectName string) bool {
 
 	return false
 }
+
+// GetScoreLevelFromScore returns the score level (A+, A, B, etc.) for a given score
+func GetScoreLevelFromScore(score float64, isWeighted bool) string {
+	if scoreMappings == nil {
+		return ""
+	}
+
+	mappingList := scoreMappings.NonWeighted
+	if isWeighted {
+		mappingList = scoreMappings.Weighted
+	}
+
+	for _, mapping := range mappingList {
+		if score >= mapping.MinValue && score <= mapping.MaxValue {
+			return mapping.Level
+		}
+	}
+
+	return ""
+}

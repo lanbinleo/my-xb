@@ -1,42 +1,55 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"myxb/internal/api"
 	"myxb/internal/client"
 	"myxb/internal/config"
 	"os"
+
+	"github.com/urfave/cli/v3"
 )
 
 var version = "1.0.0"
 
 func main() {
-	// Parse command
-	args := os.Args[1:]
-	command := ""
-	if len(args) > 0 {
-		command = args[0]
+	cmd := &cli.Command{
+		Name:    "myxb",
+		Usage:   "GPA Calculator & Score Tracker for Xiaobao",
+		Version: version,
+		Action: func(ctx context.Context, c *cli.Command) error {
+			runGPA()
+			return nil
+		},
+		Commands: []*cli.Command{
+			{
+				Name:  "login",
+				Usage: "Login and save credentials",
+				Action: func(ctx context.Context, c *cli.Command) error {
+					runLogin()
+					return nil
+				},
+			},
+			{
+				Name:  "logout",
+				Usage: "Clear saved credentials",
+				Action: func(ctx context.Context, c *cli.Command) error {
+					runLogout()
+					return nil
+				},
+			},
+		},
+		Before: func(ctx context.Context, c *cli.Command) (context.Context, error) {
+			printBanner(version)
+			return ctx, nil
+		},
 	}
 
-	switch command {
-	case "login":
-		runLogin()
-	case "help", "-h", "--help":
-		printHelp()
-	default:
-		// Default: run GPA calculation
-		runGPA()
+	if err := cmd.Run(context.Background(), os.Args); err != nil {
+		printError(err.Error())
+		os.Exit(1)
 	}
-}
-
-func printHelp() {
-	printBanner(version)
-
-	fmt.Println("Usage:")
-	fmt.Println("  myxb           Calculate GPA (requires login)")
-	fmt.Println("  myxb login     Login to save credentials")
-	fmt.Println("  myxb help      Show this help message")
-	fmt.Println()
 }
 
 func ensureLogin() (*api.API, error) {
@@ -58,7 +71,6 @@ func ensureLogin() (*api.API, error) {
 		apiClient := api.New(httpClient)
 
 		// Try to login with saved credentials
-		// We need to hash the already-hashed password one more time
 		if err := performLoginWithHash(apiClient, cfg.Username, cfg.PasswordHash); err != nil {
 			printWarning("Saved credentials failed, please login again")
 			config.Delete()
@@ -72,8 +84,6 @@ func ensureLogin() (*api.API, error) {
 }
 
 func runGPA() {
-	printBanner(version)
-
 	apiClient, err := ensureLogin()
 	if err != nil {
 		printError("You need to login first")
@@ -89,8 +99,6 @@ func runGPA() {
 }
 
 func runLogin() {
-	printBanner(version)
-
 	fmt.Println("Your credentials will be saved " + bold(cyan("locally")) + " for future use.")
 	fmt.Println()
 
@@ -130,4 +138,25 @@ func runLogin() {
 
 	fmt.Println()
 	printInfo("You can now run 'myxb' to calculate your GPA")
+}
+
+func runLogout() {
+	// Check if there are saved credentials
+	cfg, err := config.Load()
+	if err != nil || cfg == nil {
+		printWarning("No saved credentials found")
+		os.Exit(0)
+	}
+
+	// Delete the config file
+	if err := config.Delete(); err != nil {
+		printError(fmt.Sprintf("Failed to delete credentials: %v", err))
+		os.Exit(1)
+	}
+
+	printSuccess("Credentials cleared!")
+	configPath, _ := config.GetConfigPath()
+	fmt.Println(gray(fmt.Sprintf(" - Config file removed: %s", configPath)))
+	fmt.Println()
+	printInfo("Run 'myxb login' to login again")
 }

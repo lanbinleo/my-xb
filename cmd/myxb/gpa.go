@@ -8,6 +8,8 @@ import (
 	"myxb/pkg/gpa"
 	"os"
 	"strings"
+
+	"github.com/jedib0t/go-pretty/v6/table"
 )
 
 const (
@@ -105,67 +107,43 @@ func calculateGPA(apiClient *api.API) {
 	// Process each subject
 	calculatedSubjects := []gpa.Subject{}
 
-	printInfo("Calculating scores for each subject...")
+	printInfo("Fetching scores for each subject...")
 	fmt.Println()
 
-	for i, subject := range subjects {
-		fmt.Printf("  %s Processing %s...\n", gray(fmt.Sprintf("[%d/%d]", i+1, len(subjects))), cyan(subject.Name))
-
+	for _, subject := range subjects {
 		// Get task list
 		tasks, err := apiClient.GetTaskList(selectedSemester.ID, subject.ID)
 		if err != nil || len(tasks) == 0 {
-			printWarning(fmt.Sprintf("    No tasks found for %s", subject.Name))
 			continue
 		}
 
 		// Get task detail
 		detail, err := apiClient.GetTaskDetail(tasks[0].ID)
 		if err != nil {
-			printWarning(fmt.Sprintf("    Failed to get task detail: %v", err))
 			continue
 		}
 
 		// Get dynamic score detail
 		dynamicScore, err := apiClient.GetDynamicScoreDetail(detail.ClassID, subject.ID, selectedSemester.ID)
 		if err != nil {
-			printWarning(fmt.Sprintf("    Failed to get dynamic score: %v", err))
 			continue
 		}
 
 		// Get semester dynamic info for this subject
 		dynamicInfo := semesterScoreMap[subject.ID]
 
-		// Determine if elective (simplified - we'll mark manually if needed)
+		// Determine if elective
 		isElective := strings.Contains(subject.Name, ElectiveCourseKeyword)
 
 		// Process subject
 		calcSubject := gpa.ProcessSubject(detail, dynamicScore, dynamicInfo, isElective)
 		calculatedSubjects = append(calculatedSubjects, calcSubject)
-
-		// Display subject info
-		scoreStr := fmt.Sprintf("%.1f", calcSubject.Score)
-		if calcSubject.OfficialScore != nil && calcSubject.ExtraCredit != 0 {
-			scoreStr += gray(fmt.Sprintf(" (official: %.1f, extra: +%.1f)", *calcSubject.OfficialScore, calcSubject.ExtraCredit))
-		}
-
-		gpaStr := fmt.Sprintf("%.2f", calcSubject.GPA)
-		if !calcSubject.IsInGrade {
-			gpaStr += gray(" (not in GPA)")
-		}
-
-		typeStr := "Regular"
-		if calcSubject.IsWeighted {
-			typeStr = "Weighted"
-		}
-		if calcSubject.IsElective {
-			typeStr += " Elective"
-		}
-
-		fmt.Printf("    Score: %s | GPA: %s | Type: %s\n",
-			green(scoreStr), cyan(gpaStr), gray(typeStr))
 	}
 
-	fmt.Println()
+	// Print detailed tables for each subject
+	for _, subject := range calculatedSubjects {
+		printSubjectTable(subject)
+	}
 
 	// Calculate final GPA
 	printInfo("Calculating final GPA...")
@@ -176,24 +154,51 @@ func calculateGPA(apiClient *api.API) {
 	fmt.Println("----------------------------------------------")
 
 	if !math.IsNaN(result.WeightedGPA) {
-		fmt.Printf("%s %.2f %s\n",
+		fmt.Printf("%s %.2f / %.2f %s\n",
 			bold("Weighted GPA:"),
 			result.WeightedGPA,
-			gray(fmt.Sprintf("(max: %.1f)", result.MaxGPA)))
+			result.MaxGPA,
+			gray(fmt.Sprintf("(%.1f%%)", result.WeightedGPA/result.MaxGPA*100)))
 
-		fmt.Printf("%s %.2f %s\n",
+		fmt.Printf("%s %.2f / %.2f %s\n",
 			bold("Unweighted GPA:"),
 			result.UnweightedGPA,
-			gray(fmt.Sprintf("(max: %.1f)", result.UnweightedMaxGPA)))
+			result.UnweightedMaxGPA,
+			gray(fmt.Sprintf("(%.1f%%)", result.UnweightedGPA/result.UnweightedMaxGPA*100)))
 
 		fmt.Println()
 
 		// Get official GPA for comparison
 		officialGPA, err := apiClient.GetGPA(selectedSemester.ID)
 		if err == nil && officialGPA != nil {
-			fmt.Printf("%s %.2f\n",
-				bold("Official GPA:"),
-				*officialGPA)
+			diff := result.WeightedGPA - *officialGPA
+			// Use a small tolerance (0.01) to account for floating-point precision
+			if math.Abs(diff) > 0.01 {
+				sign := "+"
+				color := red
+				if diff < 0 {
+					sign = ""
+					color = green
+				}
+				diffStr := color(fmt.Sprintf("(%s%.2f)", sign, diff))
+				fmt.Printf("%s %.2f %s\n",
+					bold("Official GPA:"),
+					*officialGPA,
+					diffStr)
+
+				// Please Report This to Developers
+				fmt.Printf("\n%s%.2f%s\n%s\n%s\n%s\n",
+					bold("Hi! We found a discrepancy of "),
+					diff,
+					bold(" points in the GPA calculation."),
+					"This may be caused by special courses that are "+yellow("weighted differently or excluded")+" from official GPA calculation.",
+					"Please report this to the developers so we can improve the accuracy.",
+					"Thank you!")
+			} else {
+				fmt.Printf("%s %.2f\n",
+					bold("Official GPA:"),
+					*officialGPA)
+			}
 		} else if err == nil {
 			fmt.Println(gray("Official GPA not yet published"))
 		}
@@ -203,4 +208,104 @@ func calculateGPA(apiClient *api.API) {
 	} else {
 		printWarning("Unable to calculate GPA - no valid subjects found")
 	}
+}
+
+// printSubjectTable prints a detailed table for a subject
+func printSubjectTable(subject gpa.Subject) {
+	if math.IsNaN(subject.Score) {
+		return
+	}
+
+	t := table.NewWriter()
+	t.SetStyle(table.StyleRounded)
+
+	// Add subject header row
+	scoreStr := fmt.Sprintf("%.1f", subject.Score)
+	if subject.ExtraCredit > 0.0 {
+		scoreStr += fmt.Sprintf(" (%.2f Extra credit)", subject.ExtraCredit)
+	}
+
+	typeStr := "Regular"
+	if subject.IsWeighted {
+		typeStr = "Weighted"
+	}
+	if subject.IsElective {
+		typeStr += " Elective"
+	}
+
+	scoreLevel := getScoreLevel(subject)
+	t.AppendRow(table.Row{
+		colorizeByScoreLevel(subject.Name, scoreLevel),
+		scoreStr,
+		scoreLevel,
+		fmt.Sprintf("%.2f", subject.GPA),
+		typeStr,
+	})
+
+	// Add evaluation projects
+	for _, evalProject := range subject.EvaluationDetails {
+		if evalProject.ScoreIsNull {
+			continue
+		}
+
+		addEvaluationProjectRows(t, &evalProject, "", true, subject.IsWeighted)
+	}
+
+	fmt.Println(t.Render())
+	fmt.Println()
+}
+
+// addEvaluationProjectRows recursively adds evaluation project rows to the table
+func addEvaluationProjectRows(t table.Writer, evalProject *models.EvaluationProject, indent string, showTasks bool, isWeighted bool) {
+	// Add the evaluation project row
+	name := indent + evalProject.EvaluationProjectEName
+	proportionStr := fmt.Sprintf("%.2f%%", evalProject.Proportion)
+
+	t.AppendRow(table.Row{
+		colorizeByScoreLevel(name, evalProject.ScoreLevel),
+		fmt.Sprintf("%.1f", evalProject.Score),
+		evalProject.ScoreLevel,
+		fmt.Sprintf("%.2f", evalProject.GPA),
+		proportionStr,
+	})
+
+	// Add learning tasks if showTasks is true
+	if showTasks && len(evalProject.LearningTaskAndExamList) > 0 {
+		tasksWithScores := []models.LearningTask{}
+		for _, task := range evalProject.LearningTaskAndExamList {
+			if task.Score != nil {
+				tasksWithScores = append(tasksWithScores, task)
+			}
+		}
+
+		if len(tasksWithScores) > 0 {
+			weight := evalProject.Proportion / float64(len(tasksWithScores))
+			for _, task := range tasksWithScores {
+				score := *task.Score / task.TotalScore * 100.0
+				scoreLevel := gpa.GetScoreLevelFromScore(score, isWeighted)
+
+				t.AppendRow(table.Row{
+					colorizeByScoreLevel(indent+"- "+task.Name, scoreLevel),
+					fmt.Sprintf("%.0f / %.0f", *task.Score, task.TotalScore),
+					fmt.Sprintf("%.2f%%", score),
+					"",
+					indent + fmt.Sprintf("- %.2f%%", weight),
+				})
+			}
+		}
+	}
+
+	// Recursively add nested evaluation projects
+	for _, nestedProject := range evalProject.EvaluationProjectList {
+		if nestedProject.ScoreIsNull {
+			continue
+		}
+		addEvaluationProjectRows(t, &nestedProject, indent+"- ", showTasks, isWeighted)
+	}
+}
+
+// getScoreLevel gets the score level from a subject's evaluation projects
+func getScoreLevel(subject gpa.Subject) string {
+	// Use the subject's score and weighted status to get the accurate level
+	return gpa.GetScoreLevelFromScore(subject.Score, subject.IsWeighted)
 }

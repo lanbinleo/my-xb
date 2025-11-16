@@ -4,7 +4,8 @@
       "Bash(go mod init:*)",
       "Bash(go mod tidy:*)",
       "Bash(go build:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(go get:*)"
     ],
     "deny": [],
     "ask": []

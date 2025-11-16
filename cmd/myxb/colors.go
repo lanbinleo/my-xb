@@ -75,3 +75,35 @@ func printBanner(version string) {
 		gray("Xiaobao Grade Viewer"))
 	fmt.Println()
 }
+
+// colorizeByScoreLevel returns colored text based on score level (A+, A, B, C, D, F)
+func colorizeByScoreLevel(text string, scoreLevel string) string {
+	if len(scoreLevel) == 0 {
+		return text
+	}
+
+	letter := scoreLevel[0]
+	var color string
+
+	switch letter {
+	case 'A':
+		color = colorGreen
+	case 'B':
+		color = colorCyan
+	case 'C':
+		color = colorYellow
+	case 'D':
+		color = "\033[33m" // Yellow/Orange
+	case 'F':
+		color = colorRed
+	default:
+		return text
+	}
+
+	// Make A+ and F bold
+	if scoreLevel == "A+" || scoreLevel == "F" {
+		return colorize(colorBold, colorize(color, text))
+	}
+
+	return colorize(color, text)
+}
