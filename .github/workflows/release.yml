@@ -92,11 +92,11 @@ jobs:
 
             | Operating System | Architecture | File to Download |
             |-----------------|--------------|------------------|
-            | Windows (64-bit) | x86_64 | `myxb_*_windows_amd64.exe` |
-            | macOS (Intel) | x86_64 | `myxb_*_darwin_amd64` |
-            | macOS (Apple Silicon) | ARM64 (M1/M2/M3/M4) | `myxb_*_darwin_arm64` |
-            | Linux (64-bit) | x86_64 | `myxb_*_linux_amd64` |
-            | Linux (ARM64) | ARM64 | `myxb_*_linux_arm64` |
+            | Windows (64-bit) | x86_64 | `myxb_windows_amd64.exe` |
+            | macOS (Intel) | x86_64 | `myxb_darwin_amd64` |
+            | macOS (Apple Silicon) | ARM64 (M1/M2/M3/M4) | `myxb_darwin_arm64` |
+            | Linux (64-bit) | x86_64 | `myxb_linux_amd64` |
+            | Linux (ARM64) | ARM64 | `myxb_linux_arm64` |
 
             ### Verify checksums
             ```bash
@@ -105,4 +105,5 @@ jobs:
 
             ---
 
-            **Note:** This is a draft release. Please review the changes below before publishing.
+            **Note:** For the vast majority of users, you can download any program compiled with v1.0.2 and later. This is because the program comes with an update system.
+
