@@ -236,11 +236,14 @@ func printSubjectTable(subject gpa.Subject) {
 	scoreLevel := getScoreLevel(subject)
 	t.AppendRow(table.Row{
 		colorizeByScoreLevel(subject.Name, scoreLevel),
-		scoreStr,
-		scoreLevel,
-		fmt.Sprintf("%.2f", subject.GPA),
-		typeStr,
+		bold(scoreStr),
+		bold(scoreLevel),
+		bold(fmt.Sprintf("%.2f", subject.GPA)),
+		bold(typeStr),
 	})
+
+	// Add 分割线
+	t.AppendSeparator()
 
 	// Add evaluation projects
 	for _, evalProject := range subject.EvaluationDetails {
