@@ -86,7 +86,21 @@ jobs:
             artifacts/*
           name: Release ${{ env.VERSION }}
           body: |
-            ## Installation
+            ## Quick Install
+
+            ### Windows (PowerShell)
+            ```powershell
+            irm https://raw.githubusercontent.com/lanbinleo/my-xb/main/install.ps1 | iex
+            ```
+
+            ### macOS / Linux (Bash)
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/lanbinleo/my-xb/main/install.sh | bash
+            ```
+
+            ---
+
+            ## Manual Installation
 
             Download the appropriate binary for your platform:
 
@@ -102,6 +116,20 @@ jobs:
             ```bash
             sha256sum -c SHA256SUMS
             ```
+
+            ## Update Notes
+
+            ### Features
+
+            ...
+
+            ### Changes / Bug Fixes
+
+            ...
+
+            ### Chores
+
+            ...
 
             ---
 
