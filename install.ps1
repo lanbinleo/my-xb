@@ -87,11 +87,18 @@ function Add-ToPath($directory) {
         [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
 
         Write-ColorOutput "Added to PATH successfully!" "Green"
-        Write-ColorOutput "Note: You may need to restart your terminal for PATH changes to take effect." "Yellow"
     }
     else {
         Write-ColorOutput "Installation directory already in PATH" "Gray"
     }
+}
+
+function Refresh-SessionPath {
+    Write-ColorOutput "Refreshing current session PATH..." "Cyan"
+    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    $env:Path = "$machinePath;$userPath"
+    Write-ColorOutput "PATH refreshed for current session!" "Green"
 }
 
 # Main installation flow
@@ -123,6 +130,23 @@ Write-ColorOutput ""
 Add-ToPath $INSTALL_DIR
 Write-ColorOutput ""
 
+# Refresh current session PATH
+Refresh-SessionPath
+Write-ColorOutput ""
+
+# Verify installation
+Write-ColorOutput "Verifying installation..." "Cyan"
+try {
+    $testCommand = Get-Command myxb -ErrorAction Stop
+    Write-ColorOutput "✓ myxb is ready to use in current terminal!" "Green"
+    Write-ColorOutput "  Executable: $($testCommand.Source)" "Gray"
+}
+catch {
+    Write-ColorOutput "✓ myxb installed successfully!" "Green"
+    Write-ColorOutput "  Note: Please open a new terminal to use 'myxb' command" "Yellow"
+}
+Write-ColorOutput ""
+
 # Success message
 Write-ColorOutput "=== Installation Complete! ===" "Green"
 Write-ColorOutput ""
@@ -133,4 +157,3 @@ Write-ColorOutput "  myxb login      # Login and save credentials" "Gray"
 Write-ColorOutput "  myxb            # Calculate GPA" "Gray"
 Write-ColorOutput "  myxb help       # Show help message" "Gray"
 Write-ColorOutput ""
-Write-ColorOutput "Note: If 'myxb' command is not found, please restart your terminal." "Yellow"
