@@ -151,7 +151,7 @@ func calculateGPA(apiClient *api.API) {
 
 	// Display results
 	fmt.Println()
-	fmt.Println("----------------------------------------------")
+	fmt.Println(strings.Repeat("-", 45))
 
 	if !math.IsNaN(result.WeightedGPA) {
 		fmt.Printf("%s %.2f / %.2f %s\n",
@@ -186,6 +186,8 @@ func calculateGPA(apiClient *api.API) {
 					*officialGPA,
 					diffStr)
 
+				fmt.Println(strings.Repeat("-", 45))
+
 				// Please Report This to Developers
 				fmt.Printf("\n%s%.2f%s\n%s\n%s\n%s\n",
 					bold("Hi! We found a discrepancy of "),
@@ -198,9 +200,12 @@ func calculateGPA(apiClient *api.API) {
 				fmt.Printf("%s %.2f\n",
 					bold("Official GPA:"),
 					*officialGPA)
+
+				fmt.Println(strings.Repeat("-", 45))
 			}
 		} else if err == nil {
 			fmt.Println(gray("Official GPA not yet published"))
+			fmt.Println(strings.Repeat("-", 45))
 		}
 
 		fmt.Println()
