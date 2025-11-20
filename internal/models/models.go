@@ -64,7 +64,15 @@ type TaskData struct {
 
 // TaskItem represents a learning task
 type TaskItem struct {
-	ID uint64 `json:"id"`
+	ID                     uint64   `json:"id"`
+	Name                   string   `json:"name"`
+	SubjectName            string   `json:"subjectName"`
+	Score                  *float64 `json:"score"`
+	TotalScore             float64  `json:"totalScore"`
+	Status                 string   `json:"status"`
+	EvaluationProjectEName string   `json:"evaluationProjectEName"`
+	EvaluationProjectID    uint64   `json:"evaluationProjectId"`
+	FinishState            uint8    `json:"finishState"`
 }
 
 // TaskDetailResponse represents the task detail API response
@@ -109,7 +117,7 @@ type EvaluationProject struct {
 // LearningTask represents a learning task or exam
 type LearningTask struct {
 	Name       string   `json:"name"`
-	Score      *float64 `json:"score"`      // Nullable
+	Score      *float64 `json:"score"` // Nullable
 	TotalScore float64  `json:"totalScore"`
 }
 
@@ -132,7 +140,7 @@ type SubjectDynamicScore struct {
 	SubjectID         uint64   `json:"subjectId"`
 	SubjectName       string   `json:"subjectName"`
 	IsInGrade         bool     `json:"isInGrade"`
-	SubjectScore      *float64 `json:"subjectScore"`      // Nullable
+	SubjectScore      *float64 `json:"subjectScore"` // Nullable
 	ScoreMappingID    uint64   `json:"scoreMappingId"`
 	SubjectTotalScore float64  `json:"subjectTotalScore"`
 }

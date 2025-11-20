@@ -164,7 +164,7 @@ func (a *API) GetTaskList(semesterID, subjectID uint64) ([]models.TaskItem, erro
 		"semesterId": strconv.FormatUint(semesterID, 10),
 		"subjectId":  strconv.FormatUint(subjectID, 10),
 		"pageIndex":  "1",
-		"pageSize":   "1",
+		"pageSize":   "100",
 	}
 
 	var resp models.TaskListResponse
