@@ -55,11 +55,11 @@ func printError(msg string) {
 }
 
 func printInfo(msg string) {
-	fmt.Println(blue("ℹ"), msg)
+	fmt.Println(blue("i"), msg)
 }
 
 func printWarning(msg string) {
-	fmt.Println(yellow("⚠"), msg)
+	fmt.Println(yellow("!"), msg)
 }
 
 func printBanner(version string) {
