@@ -272,52 +272,44 @@ func printSubjectTable(subject gpa.Subject, showTasks bool, tasks []models.TaskI
 			"",
 			"",
 			"",
+			"",
+			"",
 		})
 
 		// Add "All Tasks" header
 		t.AppendRow(table.Row{
 			bold("All Tasks"),
-			"",
-			"",
-			"",
-			"",
+			"Score",
+			"Pct",
+			"Status",
+			"Weight",
 		})
 
-		// Separate tasks with scores and without scores
-		tasksWithScores := []models.TaskItem{}
-		tasksWithoutScores := []models.TaskItem{}
-
+		// Display all tasks in one loop
 		for _, task := range tasks {
 			if task.FinishState != 0 && task.Score != nil {
-				tasksWithScores = append(tasksWithScores, task)
+				// Task with score
+				score := *task.Score / task.TotalScore * 100.0
+				scoreLevel := gpa.GetScoreLevelFromScore(score, subject.IsWeighted)
+				status := green("出分")
+
+				t.AppendRow(table.Row{
+					colorizeByScoreLevel("  - "+task.Name, scoreLevel),
+					fmt.Sprintf("%.0f / %.0f", *task.Score, task.TotalScore),
+					fmt.Sprintf("%.1f%%", score),
+					status,
+					"",
+				})
 			} else {
-				tasksWithoutScores = append(tasksWithoutScores, task)
+				// Task without score
+				t.AppendRow(table.Row{
+					gray("  - " + task.Name),
+					gray(fmt.Sprintf("- / %.0f", task.TotalScore)),
+					gray("-"),
+					yellow("未出分"),
+					gray("-"),
+				})
 			}
-		}
-
-		// Display tasks with scores first
-		for _, task := range tasksWithScores {
-			score := *task.Score / task.TotalScore * 100.0
-			scoreLevel := gpa.GetScoreLevelFromScore(score, subject.IsWeighted)
-
-			t.AppendRow(table.Row{
-				colorizeByScoreLevel("  - "+task.Name, scoreLevel),
-				fmt.Sprintf("%.0f / %.0f", *task.Score, task.TotalScore),
-				fmt.Sprintf("%.1f%%", score),
-				green("出分"),
-				"",
-			})
-		}
-
-		// Display tasks without scores at the bottom
-		for _, task := range tasksWithoutScores {
-			t.AppendRow(table.Row{
-				gray("  - " + task.Name),
-				gray(fmt.Sprintf("- / %.0f", task.TotalScore)),
-				gray("-"),
-				yellow("未出分"),
-				gray("-"),
-			})
 		}
 	}
 
