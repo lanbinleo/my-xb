@@ -18,8 +18,16 @@ func main() {
 		Name:    "myxb",
 		Usage:   "GPA Calculator & Score Tracker for Xiaobao",
 		Version: version,
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:    "tasks",
+				Aliases: []string{"t"},
+				Usage:   "Show detailed task information for each subject",
+			},
+		},
 		Action: func(ctx context.Context, c *cli.Command) error {
-			runGPA()
+			showTasks := c.Bool("tasks")
+			runGPA(showTasks)
 			return nil
 		},
 		Commands: []*cli.Command{
@@ -99,7 +107,7 @@ func ensureLogin() (*api.API, error) {
 	return nil, fmt.Errorf("not logged in")
 }
 
-func runGPA() {
+func runGPA(showTasks bool) {
 	apiClient, err := ensureLogin()
 	if err != nil {
 		printError("You need to login first")
@@ -111,7 +119,7 @@ func runGPA() {
 	printSuccess("Authentication successful!")
 	fmt.Println()
 
-	calculateGPA(apiClient)
+	calculateGPA(apiClient, showTasks)
 }
 
 func runLogin() {

@@ -20,7 +20,7 @@ const (
 	ElectiveCourseKeyword = "Ele"
 )
 
-func calculateGPA(apiClient *api.API) {
+func calculateGPA(apiClient *api.API, showTasks bool) {
 	// Get semesters
 	printInfo("Fetching semesters...")
 	semesters, err := apiClient.GetSemesters()
@@ -106,18 +106,19 @@ func calculateGPA(apiClient *api.API) {
 
 	// Process each subject
 	calculatedSubjects := []gpa.Subject{}
+	subjectTasksMap := make(map[uint64][]models.TaskItem) // Store tasks for each subject
 
 	printInfo("Fetching scores for each subject...")
 	fmt.Println()
 
 	for _, subject := range subjects {
-		// Get task list
+		// Get task list (all tasks)
 		tasks, err := apiClient.GetTaskList(selectedSemester.ID, subject.ID)
 		if err != nil || len(tasks) == 0 {
 			continue
 		}
 
-		// Get task detail
+		// Get task detail (use first task to get classID)
 		detail, err := apiClient.GetTaskDetail(tasks[0].ID)
 		if err != nil {
 			continue
@@ -138,11 +139,15 @@ func calculateGPA(apiClient *api.API) {
 		// Process subject
 		calcSubject := gpa.ProcessSubject(detail, dynamicScore, dynamicInfo, isElective)
 		calculatedSubjects = append(calculatedSubjects, calcSubject)
+
+		// Store tasks for this subject
+		subjectTasksMap[subject.ID] = tasks
 	}
 
 	// Print detailed tables for each subject
 	for _, subject := range calculatedSubjects {
-		printSubjectTable(subject)
+		tasks := subjectTasksMap[subject.ID]
+		printSubjectTable(subject, showTasks, tasks)
 	}
 
 	// Calculate final GPA
@@ -151,7 +156,7 @@ func calculateGPA(apiClient *api.API) {
 
 	// Display results
 	fmt.Println()
-	fmt.Println("----------------------------------------------")
+	fmt.Println(strings.Repeat("-", 45))
 
 	if !math.IsNaN(result.WeightedGPA) {
 		fmt.Printf("%s %.2f / %.2f %s\n",
@@ -186,6 +191,8 @@ func calculateGPA(apiClient *api.API) {
 					*officialGPA,
 					diffStr)
 
+				fmt.Println(strings.Repeat("-", 45))
+
 				// Please Report This to Developers
 				fmt.Printf("\n%s%.2f%s\n%s\n%s\n%s\n",
 					bold("Hi! We found a discrepancy of "),
@@ -198,9 +205,12 @@ func calculateGPA(apiClient *api.API) {
 				fmt.Printf("%s %.2f\n",
 					bold("Official GPA:"),
 					*officialGPA)
+
+				fmt.Println(strings.Repeat("-", 45))
 			}
 		} else if err == nil {
 			fmt.Println(gray("Official GPA not yet published"))
+			fmt.Println(strings.Repeat("-", 45))
 		}
 
 		fmt.Println()
@@ -211,7 +221,7 @@ func calculateGPA(apiClient *api.API) {
 }
 
 // printSubjectTable prints a detailed table for a subject
-func printSubjectTable(subject gpa.Subject) {
+func printSubjectTable(subject gpa.Subject, showTasks bool, tasks []models.TaskItem) {
 	if math.IsNaN(subject.Score) {
 		return
 	}
@@ -251,7 +261,56 @@ func printSubjectTable(subject gpa.Subject) {
 			continue
 		}
 
-		addEvaluationProjectRows(t, &evalProject, "", true, subject.IsWeighted)
+		addEvaluationProjectRows(t, &evalProject, "", false, subject.IsWeighted)
+	}
+
+	// Add all tasks section if showTasks is true
+	if showTasks && len(tasks) > 0 {
+		// t.AppendSeparator()
+		// 加一个空行
+		t.AppendRow(table.Row{
+			"",
+			"",
+			"",
+			"",
+			"",
+		})
+
+		// Add "All Tasks" header
+		t.AppendRow(table.Row{
+			bold("All Tasks"),
+			"Score",
+			"Pct",
+			"Status",
+			"Weight",
+		})
+
+		// Display all tasks in one loop
+		for _, task := range tasks {
+			if task.FinishState != 0 && task.Score != nil {
+				// Task with score
+				score := *task.Score / task.TotalScore * 100.0
+				scoreLevel := gpa.GetScoreLevelFromScore(score, subject.IsWeighted)
+				status := green("出分")
+
+				t.AppendRow(table.Row{
+					colorizeByScoreLevel("  - "+task.Name, scoreLevel),
+					fmt.Sprintf("%.0f / %.0f", *task.Score, task.TotalScore),
+					fmt.Sprintf("%.1f%%", score),
+					status,
+					"",
+				})
+			} else {
+				// Task without score
+				t.AppendRow(table.Row{
+					gray("  - " + task.Name),
+					gray(fmt.Sprintf("- / %.0f", task.TotalScore)),
+					gray("-"),
+					yellow("未出分"),
+					gray("-"),
+				})
+			}
+		}
 	}
 
 	fmt.Println(t.Render())
@@ -271,32 +330,6 @@ func addEvaluationProjectRows(t table.Writer, evalProject *models.EvaluationProj
 		fmt.Sprintf("%.2f", evalProject.GPA),
 		proportionStr,
 	})
-
-	// Add learning tasks if showTasks is true
-	if showTasks && len(evalProject.LearningTaskAndExamList) > 0 {
-		tasksWithScores := []models.LearningTask{}
-		for _, task := range evalProject.LearningTaskAndExamList {
-			if task.Score != nil {
-				tasksWithScores = append(tasksWithScores, task)
-			}
-		}
-
-		if len(tasksWithScores) > 0 {
-			weight := evalProject.Proportion / float64(len(tasksWithScores))
-			for _, task := range tasksWithScores {
-				score := *task.Score / task.TotalScore * 100.0
-				scoreLevel := gpa.GetScoreLevelFromScore(score, isWeighted)
-
-				t.AppendRow(table.Row{
-					colorizeByScoreLevel(indent+"- "+task.Name, scoreLevel),
-					fmt.Sprintf("%.0f / %.0f", *task.Score, task.TotalScore),
-					fmt.Sprintf("%.2f%%", score),
-					"",
-					indent + fmt.Sprintf("- %.2f%%", weight),
-				})
-			}
-		}
-	}
 
 	// Recursively add nested evaluation projects
 	for _, nestedProject := range evalProject.EvaluationProjectList {

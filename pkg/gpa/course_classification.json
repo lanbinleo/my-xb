@@ -7,5 +7,16 @@
   "unweighted": [
     "Pre AP English",
     "Pre AP World History"
+  ],
+  "half_weighted": [
+    
+  ],
+  "one_third_weighted": [
+    "Chinese History"
+  ],
+  "two_third_weighted": [
+    "Chinese I",
+    "Chinese II",
+    "Chinese III"
   ]
 }
