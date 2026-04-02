@@ -245,7 +245,7 @@ func printSubjectTable(subject gpa.Subject, showTasks bool, tasks []models.TaskI
 
 	scoreLevel := getScoreLevel(subject)
 	t.AppendRow(table.Row{
-		colorizeByScoreLevel(subject.Name, scoreLevel),
+		colorizeByScoreLevel(asciiDisplayText(subject.Name), scoreLevel),
 		bold(scoreStr),
 		bold(scoreLevel),
 		bold(fmt.Sprintf("%.2f", subject.GPA)),
@@ -294,7 +294,7 @@ func printSubjectTable(subject gpa.Subject, showTasks bool, tasks []models.TaskI
 				status := green("出分")
 
 				t.AppendRow(table.Row{
-					colorizeByScoreLevel("  - "+task.Name, scoreLevel),
+					colorizeByScoreLevel("  - "+asciiDisplayText(task.Name), scoreLevel),
 					fmt.Sprintf("%.0f / %.0f", *task.Score, task.TotalScore),
 					fmt.Sprintf("%.1f%%", score),
 					status,
@@ -303,7 +303,7 @@ func printSubjectTable(subject gpa.Subject, showTasks bool, tasks []models.TaskI
 			} else {
 				// Task without score
 				t.AppendRow(table.Row{
-					gray("  - " + task.Name),
+					gray("  - " + asciiDisplayText(task.Name)),
 					gray(fmt.Sprintf("- / %.0f", task.TotalScore)),
 					gray("-"),
 					yellow("未出分"),
@@ -320,7 +320,7 @@ func printSubjectTable(subject gpa.Subject, showTasks bool, tasks []models.TaskI
 // addEvaluationProjectRows recursively adds evaluation project rows to the table
 func addEvaluationProjectRows(t table.Writer, evalProject *models.EvaluationProject, indent string, showTasks bool, isWeighted bool) {
 	// Add the evaluation project row
-	name := indent + evalProject.EvaluationProjectEName
+	name := indent + asciiDisplayText(evalProject.EvaluationProjectEName)
 	proportionStr := fmt.Sprintf("%.2f%%", evalProject.Proportion)
 
 	t.AppendRow(table.Row{
