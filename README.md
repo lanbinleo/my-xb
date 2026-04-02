@@ -9,6 +9,10 @@ This project is a refactor project of [tls-xb](https://github.com/hey2022/tls-xb
 - Login to Xiaobao with automatic credential storage
 - Calculate weighted and unweighted GPA
 - View detailed subject scores and grades
+- Support readable formatted output modes and JSON export
+- Support non-interactive semester selection, including multiple semesters / full school years
+- Support clean output mode for scripting and automation
+- Support exporting output to Desktop or a custom path
 - Compare calculated GPA with official GPA
 - Support for AP, A Level, and AS weighted courses
 - Automatic elective course detection
@@ -46,6 +50,61 @@ This will:
 - Calculate weighted and unweighted GPA
 - Display detailed subject information
 - Compare with official GPA (if published)
+
+Useful flags:
+
+- `-t, --tasks` - include detailed task rows
+- `-f, --formatted` - choose output format only; bare `-f` defaults to `table`
+- `-c, --clean` - suppress banner, prompts, progress, and other human-oriented output; without `-s`, defaults to the current semester
+- `-s, --semester` - select semester(s) without interactive prompts
+- `-e, --export` - export output to Desktop by default, or to a directory / file path
+
+Examples:
+
+```bash
+./myxb -t
+./myxb -f
+./myxb -f plain
+./myxb -f markdown
+./myxb -f json
+./myxb -f -t -c
+./myxb -f table -t -e
+./myxb -f markdown -e ~/Desktop
+./myxb -s current
+./myxb -s 2025-1
+./myxb -s 2025-2026
+./myxb -s 2024-2025,2025-2026
+```
+
+Formatted output modes:
+
+- `table` - default formatted mode; readable aligned text blocks
+- `plain` - concise sectioned text
+- `markdown` / `md` - markdown headings and bullets
+- `json` - structured JSON output
+
+Semester selector formats:
+
+- `current` - current semester
+- `all` - all available semesters
+- `0`, `1`, ... - semester index from the interactive list
+- `2025-1` - semester 1 in school year starting 2025
+- `2025-2026` - all semesters in that school year
+- `2025-2026-2` - semester 2 in that school year
+
+Semester selection behavior:
+
+- without `-s`, the CLI prompts you to choose a semester interactively
+- with `-c` but without `-s`, the CLI skips prompts and uses `current`
+- for automation or scripting, prefer passing both `-c` and `-s`
+- `-f` only changes the report format; it does not suppress the banner or prompts
+
+Export path behavior:
+
+- an existing directory exports into that directory with an auto-generated filename
+- an existing file path overwrites that file
+- a new directory path should end with `/` or `\\`
+- any other non-existent path is treated as a file path
 
 ### Commands
 

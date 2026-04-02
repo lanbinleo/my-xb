@@ -13,6 +13,8 @@
 
 # Dependency directories
 vendor/
+.gocache/
+.gomodcache/
 
 # Go workspace file
 go.work

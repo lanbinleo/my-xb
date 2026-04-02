@@ -19,15 +19,38 @@ func main() {
 		Usage:   "GPA Calculator & Score Tracker for Xiaobao",
 		Version: version,
 		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "formatted",
+				Aliases: []string{"f"},
+				Usage:   "Output format only: table, plain, markdown, or json (bare -f defaults to table)",
+			},
 			&cli.BoolFlag{
 				Name:    "tasks",
 				Aliases: []string{"t"},
 				Usage:   "Show detailed task information for each subject",
 			},
+			&cli.BoolFlag{
+				Name:    "clean",
+				Aliases: []string{"c"},
+				Usage:   "Suppress banner, prompts, progress, and other human-oriented output; without --semester, defaults to the current semester",
+			},
+			&cli.StringFlag{
+				Name:    "semester",
+				Aliases: []string{"s"},
+				Usage:   "Select semester(s) without prompts: current, all, index, 2025-1, 2025-2026, or comma-separated combinations",
+			},
+			&cli.StringFlag{
+				Name:    "export",
+				Aliases: []string{"e"},
+				Usage:   "Export output to Desktop by default, or to a provided directory/file path",
+			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
-			showTasks := c.Bool("tasks")
-			runGPA(showTasks)
+			opts, err := parseGPACommandOptions(c)
+			if err != nil {
+				return err
+			}
+			runGPA(opts)
 			return nil
 		},
 		Commands: []*cli.Command{
@@ -58,25 +81,35 @@ func main() {
 			},
 		},
 		Before: func(ctx context.Context, c *cli.Command) (context.Context, error) {
-			printBanner(version)
+			opts, err := parseGPACommandOptions(c)
+			if err != nil {
+				return ctx, err
+			}
+			if opts.showHumanChrome() {
+				printBanner(version)
+			}
 			return ctx, nil
 		},
 		After: func(ctx context.Context, c *cli.Command) error {
 			// 自动检查更新（仅在非 update 命令时）
-			if c.Name != "update" {
+			opts, err := parseGPACommandOptions(c)
+			if err != nil {
+				return err
+			}
+			if c.Name != "update" && opts.showHumanChrome() {
 				checkForUpdates()
 			}
 			return nil
 		},
 	}
 
-	if err := cmd.Run(context.Background(), os.Args); err != nil {
+	if err := cmd.Run(context.Background(), normalizeCLIArgs(os.Args)); err != nil {
 		printError(err.Error())
 		os.Exit(1)
 	}
 }
 
-func ensureLogin() (*api.API, error) {
+func ensureLogin(verbose bool) (*api.API, error) {
 	// Check if already logged in
 	cfg, err := config.Load()
 	if err != nil {
@@ -84,7 +117,9 @@ func ensureLogin() (*api.API, error) {
 	}
 
 	if cfg != nil {
-		printInfo(fmt.Sprintf("Using saved credentials for: %s", cyan(cfg.Username)))
+		if verbose {
+			printInfo(fmt.Sprintf("Using saved credentials for: %s", cyan(cfg.Username)))
+		}
 
 		// Create HTTP client
 		httpClient, err := client.New()
@@ -107,8 +142,8 @@ func ensureLogin() (*api.API, error) {
 	return nil, fmt.Errorf("not logged in")
 }
 
-func runGPA(showTasks bool) {
-	apiClient, err := ensureLogin()
+func runGPA(opts gpaCommandOptions) {
+	apiClient, err := ensureLogin(!opts.suppressProgress())
 	if err != nil {
 		printError("You need to login first")
 		fmt.Println()
@@ -116,10 +151,12 @@ func runGPA(showTasks bool) {
 		os.Exit(1)
 	}
 
-	printSuccess("Authentication successful!")
-	fmt.Println()
+	if !opts.suppressProgress() {
+		printSuccess("Authentication successful!")
+		fmt.Println()
+	}
 
-	calculateGPA(apiClient, showTasks)
+	calculateGPA(apiClient, opts)
 }
 
 func runLogin() {
