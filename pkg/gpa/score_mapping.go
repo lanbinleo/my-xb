@@ -6,6 +6,13 @@ import (
 	"strings"
 )
 
+const (
+	fullCreditWeight     = 1.0
+	halfCreditWeight     = 0.5
+	oneThirdCreditWeight = 1.0 / 3.0
+	twoThirdCreditWeight = 2.0 / 3.0
+)
+
 // ScoreMapping represents a score-to-GPA mapping entry
 type ScoreMapping struct {
 	MinValue float64 `json:"minValue"`
@@ -22,8 +29,11 @@ type ScoreMappingData struct {
 
 // CourseClassification contains lists of weighted and unweighted courses
 type CourseClassification struct {
-	Weighted   []string `json:"weighted"`
-	Unweighted []string `json:"unweighted"`
+	Weighted         []string `json:"weighted"`
+	Unweighted       []string `json:"unweighted"`
+	HalfWeighted     []string `json:"half_weighted"`
+	OneThirdWeighted []string `json:"one_third_weighted"`
+	TwoThirdWeighted []string `json:"two_third_weighted"`
 }
 
 //go:embed score_mapping.json
@@ -93,6 +103,36 @@ func IsWeightedSubject(subjectName string) bool {
 		return true
 	}
 
+	return false
+}
+
+// ResolveSubjectWeight returns the course credit weight used in GPA averaging.
+func ResolveSubjectWeight(subjectName string, electiveHint bool) float64 {
+	if courseClassification != nil {
+		if containsCourse(courseClassification.HalfWeighted, subjectName) {
+			return halfCreditWeight
+		}
+		if containsCourse(courseClassification.OneThirdWeighted, subjectName) {
+			return oneThirdCreditWeight
+		}
+		if containsCourse(courseClassification.TwoThirdWeighted, subjectName) {
+			return twoThirdCreditWeight
+		}
+	}
+
+	if electiveHint {
+		return halfCreditWeight
+	}
+
+	return fullCreditWeight
+}
+
+func containsCourse(courses []string, subjectName string) bool {
+	for _, course := range courses {
+		if subjectName == course {
+			return true
+		}
+	}
 	return false
 }
 

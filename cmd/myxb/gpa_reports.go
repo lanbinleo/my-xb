@@ -784,16 +784,23 @@ func taskStatusCode(task models.TaskItem) string {
 }
 
 func subjectTypeLabel(subject gpa.Subject) string {
+	label := ""
 	switch subjectTypeCode(subject) {
 	case "weighted_elective":
-		return "Weighted Elective"
+		label = "Weighted Elective"
 	case "weighted":
-		return "Weighted"
+		label = "Weighted"
 	case "elective":
-		return "Elective"
+		label = "Elective"
 	default:
-		return "Regular"
+		label = "Regular"
 	}
+
+	if subject.Weight != 1.0 {
+		return fmt.Sprintf("%s %.2fx", label, subject.Weight)
+	}
+
+	return label
 }
 
 func paddedColumns(widths []int, values []string) string {

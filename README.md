@@ -15,7 +15,7 @@ This project is a refactor project of [tls-xb](https://github.com/hey2022/tls-xb
 - Support exporting output to Desktop or a custom path
 - Compare calculated GPA with official GPA
 - Support for AP, A Level, and AS weighted courses
-- Automatic elective course detection
+- Automatic elective and fractional-credit course detection
 
 ## Installation
 
@@ -149,7 +149,7 @@ myxb/
 3. Adjusts proportions to account for incomplete assignments
 4. Calculates subject total score (0-100)
 5. Converts score to GPA using weighted/non-weighted mapping
-6. Applies course weights (electives: 0.5, regular: 1.0)
+6. Applies course credit weights (regular: 1.0, electives such as Spanish: 0.5, plus configured fractional-credit courses)
 7. Computes weighted average GPA
 
 See `GPA_CALCULATION.md` for detailed methodology.

@@ -5,11 +5,6 @@ import (
 	"myxb/internal/models"
 )
 
-const (
-	// HumanitiesCourseName is the special course name that is treated as elective
-	HumanitiesCourseName = "C-Humanities"
-)
-
 // Subject represents a subject with calculated scores and GPA
 type Subject struct {
 	ID                uint64
@@ -22,7 +17,7 @@ type Subject struct {
 	UnweightedGPA     float64
 	MaxGPA            float64
 	UnweightedMaxGPA  float64
-	Weight            float64 // 1.0 for regular, 0.5 for elective
+	Weight            float64 // Credit weight used in GPA averaging
 	IsWeighted        bool    // Whether this is a weighted course
 	IsElective        bool
 	IsInGrade         bool // Whether this subject counts toward GPA
@@ -177,23 +172,19 @@ func ProcessSubject(detail *models.SubjectDetail, dynamicScore *models.DynamicSc
 	dynamicInfo *models.SubjectDynamicScore, isElective bool) Subject {
 
 	subject := Subject{
-		ID:        detail.SubjectID,
-		Name:      detail.SubjectName,
-		ClassID:   detail.ClassID,
-		Weight:    1.0,
-		IsElective: isElective,
-		IsInGrade: true,
+		ID:                detail.SubjectID,
+		Name:              detail.SubjectName,
+		ClassID:           detail.ClassID,
+		Weight:            fullCreditWeight,
+		IsElective:        isElective,
+		IsInGrade:         true,
 		EvaluationDetails: dynamicScore.EvaluationProjectList,
-	}
-
-	// Set elective weight
-	if isElective || detail.SubjectName == HumanitiesCourseName {
-		subject.Weight = 0.5
-		subject.IsElective = true
 	}
 
 	// Determine if weighted subject
 	subject.IsWeighted = IsWeightedSubject(detail.SubjectName)
+	subject.Weight = ResolveSubjectWeight(detail.SubjectName, isElective)
+	subject.IsElective = isElective
 
 	// Adjust proportions
 	AdjustProportions(dynamicScore.EvaluationProjectList)

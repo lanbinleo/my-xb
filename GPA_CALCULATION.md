@@ -107,33 +107,38 @@ func isWeightedSubject(subjectName string) bool {
 每个科目有一个权重系数，用于最终GPA计算：
 
 ### 默认权重: 1.0
-大部分必修课使用默认权重1.0
+大部分课程使用默认权重 `1.0`。
 
-### 选修课权重: 0.5
-以下情况权重设为0.5：
-1. **选修课（Elective）**: 课程名称包含"Ele"的课程
-2. **C-Humanities**: 特殊指定的课程
+### 分数权重课程
+当前实现支持以下 credit weight：
 
-### 识别选修课的方法
+1. `1.0`: 普通课程、AP、非AP、体育等标准学分课程
+2. `0.5`: 选修课，例如名称中带 `Ele` 的课程，或在 `course_classification.json` 的 `half_weighted` 中列出的课程
+3. `1/3` 和 `2/3`: 从 `course_classification.json` 读取的特殊部分学分课程
 
-通过查询学生课表（Calendar API）识别选修课：
+### 识别 credit weight 的方法
+
+实际实现按以下优先级判定：
 ```go
-// 伪代码
-calendar := GetCalendar(client, currentTime-8days, currentTime+8days)
-electiveClassIDs := []uint64{}
+weight := 1.0
 
-for _, block := range calendar.Blocks {
-    if strings.Contains(block.ClassName, "Ele") {
-        electiveClassIDs = append(electiveClassIDs, block.ID)
-    }
-}
-
-// 对每个科目检查
-if contains(electiveClassIDs, subject.ClassID) || subject.Name == "C-Humanities" {
-    subject.Weight = 0.5
-    subject.Elective = true
+switch {
+case subjectName in courseClassification.half_weighted:
+    weight = 0.5
+case subjectName in courseClassification.one_third_weighted:
+    weight = 1.0 / 3.0
+case subjectName in courseClassification.two_third_weighted:
+    weight = 2.0 / 3.0
+case strings.Contains(subjectName, "Ele"):
+    weight = 0.5
 }
 ```
+
+`course_classification.json` 当前内置的特殊部分学分课程包括：
+
+- `C-Humanities`, `Spanish I`, `Spanish II`, `Fine Art I`, `Fine Art II`, `Fine Art III`, `Fine Art IV` -> `0.5`
+- `Chinese History` -> `1/3`
+- `Chinese I`, `Chinese II`, `Chinese III` -> `2/3`
 
 ---
 
@@ -303,7 +308,7 @@ func calculateGPA(subjects []Subject) CalculatedGPA {
 假设有3门课程：
 1. AP Calculus: GPA=4.5, Weight=1.0 (Weighted)
 2. English: GPA=3.7, Weight=1.0 (Non-Weighted)
-3. Elective Art: GPA=4.0, Weight=0.5 (Non-Weighted)
+3. Spanish II: GPA=4.0, Weight=0.5 (Non-Weighted)
 
 ```
 总权重 = 1.0 + 1.0 + 0.5 = 2.5

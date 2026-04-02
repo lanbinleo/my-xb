@@ -6,10 +6,17 @@
   ],
   "unweighted": [
     "Pre AP English",
-    "Pre AP World History"
+    "Pre AP World History",
+    "P"
   ],
   "half_weighted": [
-    
+    "C-Humanities",
+    "Spanish I",
+    "Spanish II",
+    "Fine Art I",
+    "Fine Art II",
+    "Fine Art III",
+    "Fine Art IV"
   ],
   "one_third_weighted": [
     "Chinese History"
