@@ -300,6 +300,61 @@ type GpaResponse struct {
 
 ---
 
+### 10. 获取日程表
+
+**端点**: `POST /api/Schedule/ListScheduleByParent`
+
+**请求体**:
+```go
+type ScheduleRequest struct {
+    BeginTime string `json:"beginTime"` // 格式: "2026-03-29"
+    EndTime   string `json:"endTime"`   // 格式: "2026-04-04"
+}
+```
+
+**响应结构**:
+```go
+type ScheduleListResponse struct {
+    State int            `json:"state"`
+    Msg   string         `json:"msg"`
+    MsgCN string         `json:"msgCN"`
+    MsgEN string         `json:"msgEN"`
+    Data  []ScheduleItem `json:"data"`
+}
+
+type ScheduleItem struct {
+    ScheduleType      int               `json:"scheduleType"`      // 3=俱乐部/活动, 4=课程
+    RearrangementType int               `json:"rearrangementType"`
+    Color             string            `json:"color"`             // 前端颜色
+    IsAllDay          bool              `json:"isAllDay"`
+    BeginTime         string            `json:"beginTime"`         // 格式: "2026-04-02T13:25:00"
+    EndTime           string            `json:"endTime"`           // 格式: "2026-04-02T14:05:00"
+    FormalCourseOrder int               `json:"formalCourseOrder"` // 节次序号
+    TeacherList       []ScheduleTeacher `json:"teacherList"`
+    PlaygroundName    string            `json:"playgroundName"`    // 上课地点，可能为空
+    PlaygroundEName   string            `json:"playgroundEName"`
+    Remark            string            `json:"remark"`
+    EName             string            `json:"eName"`
+    ID                uint64            `json:"id"`
+    Name              string            `json:"name"`
+}
+
+type ScheduleTeacher struct {
+    EName string `json:"eName"`
+    ID    uint64 `json:"id"`
+    Name  string `json:"name"`
+}
+```
+
+**说明**:
+- 请求体使用日期范围，而不是学期ID
+- 响应通常返回一周内的课程、俱乐部、活动等条目
+- `formalCourseOrder` 可以用来映射课表节次
+- 对高中生，如果学校实际作息与 API 返回时间不一致，可以在客户端按节次重映射显示时间
+- 建议做本地缓存，避免重复获取同一周数据
+
+---
+
 ## 典型API调用流程
 
 ```
@@ -319,6 +374,8 @@ type GpaResponse struct {
 6. GetStuSemesterDynamicScore (获取整体信息，确认是否计入GPA)
    ↓
 7. GetGpa (获取官方GPA，用于对比)
+   ↓
+8. ListScheduleByParent (按日期范围获取一周课表)
 ```
 
 ---

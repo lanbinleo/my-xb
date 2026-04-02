@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.0.8 - 2026-04-02
+
+### Features
+
+- Added `myxb schedule` with readable day views, current-class highlighting, and next-class lookup.
+- Added `myxb schedule now`, `myxb schedule next`, and `myxb schedule day <date|weekday>` commands.
+- Added saved schedule profiles so users can choose `highschool` or `standard` timetable interpretation.
+
+### Changes / Bug Fixes
+
+- Added local week-level schedule caching for `/api/Schedule/ListScheduleByParent`.
+- Scoped timetable cache entries by account so different logins do not reuse each other's cached weeks.
+- Mapped high-school periods 1-8 onto the provided bell schedule while leaving other schedule items on their API times.
+- Required an explicit `schedule profile` selection before timetable commands can run.
+- Preserved saved schedule profile preferences when logging out or logging in again.
+
+### Chores
+
+- Added schedule service, rendering, and cache coverage tests.
+- Ignored local HAR captures so request archives are not committed accidentally.
+- Updated README and API documentation for the new timetable flow.
+
 ## v1.0.7 - 2026-04-02
 
 ### Features

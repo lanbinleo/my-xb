@@ -11,7 +11,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-var version = "1.0.7-dev"
+var version = "1.0.8"
 
 func main() {
 	cmd := &cli.Command{
@@ -55,30 +55,33 @@ func main() {
 		},
 		Commands: []*cli.Command{
 			{
-
-				Name:  "login",
-				Usage: "Login and save credentials",
+				Name:    "login",
+				Aliases: []string{"l"},
+				Usage:   "Login and save credentials",
 				Action: func(ctx context.Context, c *cli.Command) error {
 					runLogin()
 					return nil
 				},
 			},
 			{
-				Name:  "logout",
-				Usage: "Clear saved credentials",
+				Name:    "logout",
+				Aliases: []string{"lo"},
+				Usage:   "Clear saved credentials",
 				Action: func(ctx context.Context, c *cli.Command) error {
 					runLogout()
 					return nil
 				},
 			},
 			{
-				Name:  "update",
-				Usage: "Check for updates and update to the latest version",
+				Name:    "update",
+				Aliases: []string{"u"},
+				Usage:   "Check for updates and update to the latest version",
 				Action: func(ctx context.Context, c *cli.Command) error {
 					runUpdate()
 					return nil
 				},
 			},
+			newScheduleCommand(),
 		},
 		Before: func(ctx context.Context, c *cli.Command) (context.Context, error) {
 			opts, err := parseGPACommandOptions(c)
@@ -116,7 +119,7 @@ func ensureLogin(verbose bool) (*api.API, error) {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
 
-	if cfg != nil {
+	if cfg != nil && cfg.HasCredentials() {
 		if verbose {
 			printInfo(fmt.Sprintf("Using saved credentials for: %s", cyan(cfg.Username)))
 		}
@@ -184,10 +187,16 @@ func runLogin() {
 	printSuccess("Login successful!")
 
 	// Save credentials
-	cfg := &config.Config{
-		Username:     username,
-		PasswordHash: config.HashPassword(password),
+	cfg, err := config.Load()
+	if err != nil {
+		printWarning(fmt.Sprintf("Failed to load existing config, recreating it: %v", err))
+		cfg = nil
 	}
+	if cfg == nil {
+		cfg = &config.Config{}
+	}
+	cfg.Username = username
+	cfg.PasswordHash = config.HashPassword(password)
 
 	if err := config.Save(cfg); err != nil {
 		printWarning(fmt.Sprintf("Failed to save credentials: %v", err))
@@ -198,13 +207,18 @@ func runLogin() {
 	}
 
 	fmt.Println()
+	if _, ok := cfg.ConfiguredScheduleProfile(); !ok {
+		printWarning("Schedule profile not set yet")
+		printInfo("Run 'myxb schedule profile standard' or 'myxb schedule profile highschool' before using timetable commands")
+		fmt.Println()
+	}
 	printInfo("You can now run 'myxb' to calculate your GPA")
 }
 
 func runLogout() {
 	// Check if there are saved credentials
 	cfg, err := config.Load()
-	if err != nil || cfg == nil {
+	if err != nil || cfg == nil || !cfg.HasCredentials() {
 		printWarning("No saved credentials found")
 		os.Exit(0)
 	}
@@ -216,8 +230,12 @@ func runLogout() {
 	}
 
 	printSuccess("Credentials cleared!")
-	configPath, _ := config.GetConfigPath()
-	fmt.Println(gray(fmt.Sprintf(" - Config file removed: %s", configPath)))
+	if remainingCfg, err := config.Load(); err == nil && remainingCfg != nil && remainingCfg.ScheduleProfile != "" {
+		fmt.Println(gray(fmt.Sprintf(" - Schedule profile kept: %s", remainingCfg.EffectiveScheduleProfile())))
+	} else {
+		configPath, _ := config.GetConfigPath()
+		fmt.Println(gray(fmt.Sprintf(" - Config file removed: %s", configPath)))
+	}
 	fmt.Println()
 	printInfo("Run 'myxb login' to login again")
 }

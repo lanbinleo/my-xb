@@ -151,3 +151,53 @@ type GpaResponse struct {
 	Msg   string  `json:"msg"`
 	Data  float64 `json:"data"` // Can be null if not published
 }
+
+// ScheduleRequest represents the schedule request payload.
+type ScheduleRequest struct {
+	BeginTime string `json:"beginTime"`
+	EndTime   string `json:"endTime"`
+}
+
+// ScheduleListResponse represents the schedule API response.
+type ScheduleListResponse struct {
+	State int            `json:"state"`
+	Msg   string         `json:"msg"`
+	MsgCN string         `json:"msgCN"`
+	MsgEN string         `json:"msgEN"`
+	Data  []ScheduleItem `json:"data"`
+}
+
+// ScheduleItem represents a single schedule entry.
+type ScheduleItem struct {
+	ScheduleType      int               `json:"scheduleType"`
+	RearrangementType int               `json:"rearrangementType"`
+	Color             string            `json:"color"`
+	IsAllDay          bool              `json:"isAllDay"`
+	BeginTime         string            `json:"beginTime"`
+	EndTime           string            `json:"endTime"`
+	FormalCourseOrder int               `json:"formalCourseOrder"`
+	TeacherList       []ScheduleTeacher `json:"teacherList"`
+	PlaygroundName    string            `json:"playgroundName"`
+	PlaygroundEName   string            `json:"playgroundEName"`
+	ClassInfo         ScheduleClassInfo `json:"classInfo"`
+	Remark            string            `json:"remark"`
+	EName             string            `json:"eName"`
+	ID                uint64            `json:"id"`
+	Name              string            `json:"name"`
+}
+
+// ScheduleTeacher represents a teacher attached to a schedule item.
+type ScheduleTeacher struct {
+	EName string `json:"eName"`
+	ID    uint64 `json:"id"`
+	Name  string `json:"name"`
+}
+
+// ScheduleClassInfo contains class metadata for a schedule item.
+type ScheduleClassInfo struct {
+	ID         uint64 `json:"id"`
+	ClassName  string `json:"className"`
+	ClassEName string `json:"classEName"`
+	Grade      int    `json:"grade"`
+	ClassCode  string `json:"classCode"`
+}

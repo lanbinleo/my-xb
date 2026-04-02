@@ -34,6 +34,16 @@ func checkAPIResponse(state int, msg string) error {
 	return nil
 }
 
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+
+	return "unknown error"
+}
+
 // checkLoginResponse checks the login response state and returns a specific error message
 func checkLoginResponse(state int, msg string) error {
 	if state != 0 {
@@ -261,4 +271,24 @@ func (a *API) GetGPA(semesterID uint64) (*float64, error) {
 	}
 
 	return &resp.Data, nil
+}
+
+// ListScheduleByParent retrieves schedule items for the given date range.
+func (a *API) ListScheduleByParent(beginTime, endTime string) ([]models.ScheduleItem, error) {
+	req := models.ScheduleRequest{
+		BeginTime: beginTime,
+		EndTime:   endTime,
+	}
+
+	var resp models.ScheduleListResponse
+	err := a.client.PostJSON("/api/Schedule/ListScheduleByParent", nil, req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := checkAPIResponse(resp.State, firstNonEmpty(resp.Msg, resp.MsgCN, resp.MsgEN)); err != nil {
+		return nil, err
+	}
+
+	return resp.Data, nil
 }

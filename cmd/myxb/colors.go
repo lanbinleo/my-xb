@@ -4,14 +4,15 @@ import "fmt"
 
 // ANSI color codes
 const (
-	colorReset  = "\033[0m"
-	colorRed    = "\033[31m"
-	colorGreen  = "\033[32m"
-	colorYellow = "\033[33m"
-	colorBlue   = "\033[34m"
-	colorCyan   = "\033[36m"
-	colorGray   = "\033[90m"
-	colorBold   = "\033[1m"
+	colorReset   = "\033[0m"
+	colorRed     = "\033[31m"
+	colorGreen   = "\033[32m"
+	colorYellow  = "\033[33m"
+	colorBlue    = "\033[34m"
+	colorMagenta = "\033[35m"
+	colorCyan    = "\033[36m"
+	colorGray    = "\033[90m"
+	colorBold    = "\033[1m"
 )
 
 func colorize(color, text string) string {
@@ -32,6 +33,10 @@ func yellow(text string) string {
 
 func blue(text string) string {
 	return colorize(colorBlue, text)
+}
+
+func magenta(text string) string {
+	return colorize(colorMagenta, text)
 }
 
 func cyan(text string) string {

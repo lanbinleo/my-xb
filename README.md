@@ -9,6 +9,7 @@ This project is a refactor project of [tls-xb](https://github.com/hey2022/tls-xb
 - Login to Xiaobao with automatic credential storage
 - Calculate weighted and unweighted GPA
 - View detailed subject scores and grades
+- View today's timetable, the current class, and the next class
 - Support readable formatted output modes and JSON export
 - Support non-interactive semester selection, including multiple semesters / full school years
 - Support clean output mode for scripting and automation
@@ -110,6 +111,12 @@ Export path behavior:
 
 - `myxb` - Calculate GPA (default command)
 - `myxb login` - Login and save credentials
+- `myxb schedule` - Show today's timetable with current/next class highlights
+- `myxb schedule now` - Show the class currently in session
+- `myxb schedule next` - Show the next class for today
+- `myxb schedule day friday` - Show the timetable for a weekday in the current week
+- `myxb schedule day 2026-04-03` - Show the timetable for a specific date
+- `myxb schedule profile highschool` - Save the high-school bell schedule profile
 - `myxb help` - Show help message
 
 ## Project Structure
@@ -126,6 +133,7 @@ myxb/
 │   ├── auth/          # Password hashing
 │   ├── client/        # HTTP client with cookie management
 │   ├── config/        # Credential storage
+│   ├── schedule/      # Timetable fetching, caching, and live schedule views
 │   └── models/        # Data structures
 └── pkg/gpa/           # GPA calculation logic
     ├── calculator.go  # Core GPA calculator
@@ -170,11 +178,47 @@ The config file contains:
 ```json
 {
   "username": "your_username",
-  "password_hash": "MD5_HASH_OF_PASSWORD"
+  "password_hash": "MD5_HASH_OF_PASSWORD",
+  "schedule_profile": "highschool"
 }
 ```
 
 To reset credentials, delete this file or run `myxb login` again.
+
+### Schedule / Timetable
+
+The schedule command reads Xiaobao's `/api/Schedule/ListScheduleByParent` endpoint and caches the current school week locally.
+
+Useful commands:
+
+```bash
+./myxb schedule profile standard
+./myxb schedule
+./myxb schedule now
+./myxb schedule next
+./myxb schedule day friday
+./myxb schedule day 2026-04-03
+./myxb schedule -d 周四
+./myxb schedule --refresh
+./myxb schedule profile highschool
+```
+
+Notes:
+
+- First-time timetable use requires choosing a profile with `myxb schedule profile standard` or `myxb schedule profile highschool`
+- `myxb schedule` defaults to today's timetable and highlights `NOW` / `NEXT`
+- `myxb schedule day ...` accepts `YYYY-MM-DD`, English weekdays, Chinese weekdays, `today`, and `tomorrow`
+- `myxb schedule profile highschool` adjusts periods 1-8 to the high-school bell schedule:
+  - `P1` `08:00-08:40`
+  - `P2` `08:40-09:20`
+  - `P3` `10:10-10:50`
+  - `P4` `11:00-11:40`
+  - `P5` `11:50-12:30`
+  - `B6` `13:25-14:05`
+  - `B7` `14:15-14:55`
+  - `B8` `15:05-15:45`
+- `standard` keeps the raw begin/end times returned by Xiaobao
+- `--refresh` bypasses the local cache when you want a fresh fetch
 
 ### Building
 
