@@ -11,7 +11,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-var version = "1.0.8"
+var version = "1.0.9"
 
 func main() {
 	cmd := &cli.Command{
@@ -133,8 +133,10 @@ func ensureLogin(verbose bool) (*api.API, error) {
 		apiClient := api.New(httpClient)
 
 		// Try to login with saved credentials
-		if err := performLoginWithHash(apiClient, cfg.Username, cfg.PasswordHash); err != nil {
-			printWarning("Saved credentials failed, please login again")
+		if err := performLoginWithHash(apiClient, cfg.Username, cfg.PasswordHash, verbose); err != nil {
+			if verbose {
+				printWarning("Saved credentials failed, please login again")
+			}
 			config.Delete()
 			return nil, fmt.Errorf("authentication failed")
 		}

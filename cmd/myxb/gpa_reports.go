@@ -20,6 +20,7 @@ type semesterReport struct {
 	Result         gpa.CalculatedGPA
 	OfficialGPA    *float64
 	OfficialGPAErr error
+	Warnings       []string
 }
 
 type jsonOutput struct {
@@ -51,6 +52,7 @@ type jsonSummary struct {
 	OfficialGPAError string   `json:"official_gpa_error,omitempty"`
 	OfficialDiff     *float64 `json:"official_diff,omitempty"`
 	SubjectCount     int      `json:"subject_count"`
+	Warnings         []string `json:"warnings,omitempty"`
 }
 
 type jsonSubjectReport struct {
@@ -150,7 +152,10 @@ func collectSingleSemesterReport(apiClient *api.API, semester models.Semester, o
 	}
 
 	logProgress(opts, "Fetching semester-wide scores...")
-	semesterScores, _ := apiClient.GetSemesterDynamicScore(semester.ID)
+	semesterScores, err := apiClient.GetSemesterDynamicScore(semester.ID)
+	if err != nil {
+		return semesterReport{}, fmt.Errorf("failed to get semester-wide scores for %s: %w", semesterLabel(semester), err)
+	}
 
 	semesterScoreMap := make(map[uint64]*models.SubjectDynamicScore)
 	for idx := range semesterScores {
@@ -159,6 +164,7 @@ func collectSingleSemesterReport(apiClient *api.API, semester models.Semester, o
 
 	calculatedSubjects := []gpa.Subject{}
 	subjectTasksMap := make(map[uint64][]models.TaskItem)
+	warnings := []string{}
 
 	logProgress(opts, "Fetching scores for each subject...")
 	if !opts.suppressProgress() {
@@ -167,18 +173,22 @@ func collectSingleSemesterReport(apiClient *api.API, semester models.Semester, o
 
 	for _, subject := range subjects {
 		tasks, err := apiClient.GetTaskList(semester.ID, subject.ID)
-		if err != nil || len(tasks) == 0 {
+		if err != nil {
+			return semesterReport{}, fmt.Errorf("failed to get tasks for subject %q (%d): %w", subject.Name, subject.ID, err)
+		}
+		if len(tasks) == 0 {
+			warnings = append(warnings, fmt.Sprintf("Skipped %s: no learning tasks returned", subject.Name))
 			continue
 		}
 
 		detail, err := apiClient.GetTaskDetail(tasks[0].ID)
 		if err != nil {
-			continue
+			return semesterReport{}, fmt.Errorf("failed to get task detail for subject %q (%d), task %d: %w", subject.Name, subject.ID, tasks[0].ID, err)
 		}
 
 		dynamicScore, err := apiClient.GetDynamicScoreDetail(detail.ClassID, subject.ID, semester.ID)
 		if err != nil {
-			continue
+			return semesterReport{}, fmt.Errorf("failed to get score detail for subject %q (%d): %w", subject.Name, subject.ID, err)
 		}
 
 		dynamicInfo := semesterScoreMap[subject.ID]
@@ -197,6 +207,7 @@ func collectSingleSemesterReport(apiClient *api.API, semester models.Semester, o
 		Result:         result,
 		OfficialGPA:    officialGPA,
 		OfficialGPAErr: officialGPAErr,
+		Warnings:       warnings,
 	}, nil
 }
 
@@ -426,6 +437,10 @@ func renderHumanSummary(report semesterReport, opts gpaCommandOptions) string {
 	if math.IsNaN(report.Result.WeightedGPA) {
 		out.WriteString(yellow("!"))
 		out.WriteString(" Unable to calculate GPA - no valid subjects found")
+		if warningText := renderWarnings(report.Warnings, true); warningText != "" {
+			out.WriteString("\n\n")
+			out.WriteString(warningText)
+		}
 		return out.String()
 	}
 
@@ -440,6 +455,12 @@ func renderHumanSummary(report semesterReport, opts gpaCommandOptions) string {
 		report.Result.UnweightedGPA,
 		report.Result.UnweightedMaxGPA,
 		gray(fmt.Sprintf("(%.1f%%)", report.Result.UnweightedGPA/report.Result.UnweightedMaxGPA*100))))
+
+	if warningText := renderWarnings(report.Warnings, true); warningText != "" {
+		out.WriteString("\n")
+		out.WriteString(warningText)
+		out.WriteString("\n")
+	}
 
 	out.WriteString("\n")
 
@@ -492,6 +513,9 @@ func renderTableReports(reports []semesterReport, opts gpaCommandOptions) string
 	for reportIdx, report := range reports {
 		if math.IsNaN(report.Result.WeightedGPA) {
 			out.WriteString("Semester: " + semesterLabel(report.Semester) + "\nNo GPA data available.\n")
+			if warningText := renderWarnings(report.Warnings, false); warningText != "" {
+				out.WriteString(warningText)
+			}
 			continue
 		}
 
@@ -509,6 +533,10 @@ func renderTableReports(reports []semesterReport, opts gpaCommandOptions) string
 			out.WriteString(" | official unavailable")
 		}
 		out.WriteString("\n")
+		if warningText := renderWarnings(report.Warnings, false); warningText != "" {
+			out.WriteString(warningText)
+			out.WriteString("\n")
+		}
 
 		for subjectIdx, subject := range report.Subjects {
 			if subjectIdx == 0 {
@@ -569,6 +597,9 @@ func renderPlainReports(reports []semesterReport, opts gpaCommandOptions) string
 		out.WriteString("Semester: " + semesterLabel(report.Semester) + "\n")
 		if math.IsNaN(report.Result.WeightedGPA) {
 			out.WriteString("No GPA data available.\n")
+			if warningText := renderWarnings(report.Warnings, false); warningText != "" {
+				out.WriteString(warningText)
+			}
 		} else {
 			out.WriteString(fmt.Sprintf("Weighted GPA: %.2f / %.2f\n", report.Result.WeightedGPA, report.Result.MaxGPA))
 			out.WriteString(fmt.Sprintf("Unweighted GPA: %.2f / %.2f\n", report.Result.UnweightedGPA, report.Result.UnweightedMaxGPA))
@@ -578,6 +609,9 @@ func renderPlainReports(reports []semesterReport, opts gpaCommandOptions) string
 				out.WriteString(fmt.Sprintf("Official GPA unavailable: %v\n", report.OfficialGPAErr))
 			}
 			out.WriteString(fmt.Sprintf("Subjects: %d\n", len(report.Result.Subjects)))
+			if warningText := renderWarnings(report.Warnings, false); warningText != "" {
+				out.WriteString(warningText)
+			}
 		}
 		for _, subject := range report.Subjects {
 			out.WriteString("\n[" + asciiDisplayText(subject.Name) + "]\n")
@@ -609,6 +643,9 @@ func renderMarkdownReports(reports []semesterReport, opts gpaCommandOptions) str
 		out.WriteString("## " + semesterLabel(report.Semester) + "\n\n")
 		if math.IsNaN(report.Result.WeightedGPA) {
 			out.WriteString("- No GPA data available\n")
+			for _, warning := range report.Warnings {
+				out.WriteString("- Warning: " + asciiDisplayText(warning) + "\n")
+			}
 		} else {
 			out.WriteString(fmt.Sprintf("- Weighted GPA: %.2f / %.2f\n", report.Result.WeightedGPA, report.Result.MaxGPA))
 			out.WriteString(fmt.Sprintf("- Unweighted GPA: %.2f / %.2f\n", report.Result.UnweightedGPA, report.Result.UnweightedMaxGPA))
@@ -618,6 +655,9 @@ func renderMarkdownReports(reports []semesterReport, opts gpaCommandOptions) str
 				out.WriteString(fmt.Sprintf("- Official GPA unavailable: %v\n", report.OfficialGPAErr))
 			}
 			out.WriteString(fmt.Sprintf("- Subjects: %d\n", len(report.Result.Subjects)))
+			for _, warning := range report.Warnings {
+				out.WriteString("- Warning: " + asciiDisplayText(warning) + "\n")
+			}
 		}
 		for _, subject := range report.Subjects {
 			out.WriteString("\n### " + asciiDisplayText(subject.Name) + "\n")
@@ -658,6 +698,7 @@ func renderJSONReports(reports []semesterReport, opts gpaCommandOptions) (string
 			OfficialGPA:      report.OfficialGPA,
 			OfficialGPAError: errorString(report.OfficialGPAErr),
 			SubjectCount:     len(report.Result.Subjects),
+			Warnings:         report.Warnings,
 		}
 		if report.OfficialGPA != nil && !math.IsNaN(report.Result.WeightedGPA) {
 			diff := report.Result.WeightedGPA - *report.OfficialGPA
@@ -816,6 +857,24 @@ func paddedColumns(widths []int, values []string) string {
 		parts = append(parts, text)
 	}
 	return strings.TrimRight(strings.Join(parts, "  "), " ")
+}
+
+func renderWarnings(warnings []string, colorized bool) string {
+	if len(warnings) == 0 {
+		return ""
+	}
+
+	var out strings.Builder
+	for _, warning := range warnings {
+		prefix := "Warning: "
+		if colorized {
+			prefix = yellow("Warning: ")
+		}
+		out.WriteString(prefix)
+		out.WriteString(asciiDisplayText(warning))
+		out.WriteString("\n")
+	}
+	return out.String()
 }
 
 func logProgress(opts gpaCommandOptions, message string) {

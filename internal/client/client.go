@@ -8,9 +8,12 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"strings"
+	"time"
 )
 
 const BaseURL = "https://tsinglanstudent.schoolis.cn"
+const defaultTimeout = 30 * time.Second
 
 // Client represents an HTTP client with cookie management
 type Client struct {
@@ -26,7 +29,7 @@ func New() (*Client, error) {
 	}
 
 	return &Client{
-		httpClient: &http.Client{Jar: jar},
+		httpClient: &http.Client{Jar: jar, Timeout: defaultTimeout},
 		baseURL:    BaseURL,
 	}, nil
 }
@@ -62,6 +65,10 @@ func (c *Client) Get(endpoint string, queryParams map[string]string) ([]byte, er
 	}
 	defer resp.Body.Close()
 
+	if err := checkHTTPStatus(resp); err != nil {
+		return nil, err
+	}
+
 	return io.ReadAll(resp.Body)
 }
 
@@ -90,7 +97,25 @@ func (c *Client) Post(endpoint string, queryParams map[string]string, body inter
 	}
 	defer resp.Body.Close()
 
+	if err := checkHTTPStatus(resp); err != nil {
+		return nil, err
+	}
+
 	return io.ReadAll(resp.Body)
+}
+
+func checkHTTPStatus(resp *http.Response) error {
+	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
+		return nil
+	}
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	message := strings.TrimSpace(string(body))
+	if message == "" {
+		message = resp.Status
+	}
+
+	return fmt.Errorf("HTTP request returned %s: %s", resp.Status, message)
 }
 
 // GetJSON performs a GET request and unmarshals JSON response

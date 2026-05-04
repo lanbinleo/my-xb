@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.0.9 - 2026-05-04
+
+### Changes / Bug Fixes
+
+- Fixed GPA reports so critical score API failures no longer silently produce incomplete calculations.
+- Fixed unreleased/all-null score projects so they are excluded as unavailable instead of being treated as 0/F.
+- Fixed `-c -f json` output so saved-credential login progress no longer pollutes machine-readable JSON.
+- Added visible warnings for skipped subjects that have no returned learning tasks.
+- Added HTTP request timeouts and non-2xx status handling for clearer network failures.
+
+### Chores
+
+- Updated `github.com/ulikunitz/xz` to `v0.5.15` to resolve the `GO-2025-3922` vulnerability reported by `govulncheck`.
+- Added GPA regression coverage for unreleased score handling.
+
 ## v1.0.8 - 2026-04-02
 
 ### Features

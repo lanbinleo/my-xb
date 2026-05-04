@@ -92,3 +92,43 @@ func TestProcessSubjectKeepsElectiveFlagSeparateFromCreditWeight(t *testing.T) {
 		})
 	}
 }
+
+func TestCalculateSubjectScoreReturnsNaNWhenNoScoresAreReleased(t *testing.T) {
+	score := CalculateSubjectScore([]models.EvaluationProject{
+		{EvaluationProjectEName: "Formative", Proportion: 40, ScoreIsNull: true},
+		{EvaluationProjectEName: "Summative", Proportion: 60, ScoreIsNull: true},
+	})
+
+	if !math.IsNaN(score) {
+		t.Fatalf("CalculateSubjectScore() = %.1f, want NaN for all-null projects", score)
+	}
+}
+
+func TestProcessSubjectExcludesUnreleasedSubjectFromGPA(t *testing.T) {
+	subject := ProcessSubject(
+		&models.SubjectDetail{
+			SubjectID:   1,
+			SubjectName: "Physics",
+			ClassID:     2,
+		},
+		&models.DynamicScoreData{
+			EvaluationProjectList: []models.EvaluationProject{
+				{EvaluationProjectEName: "Total", Proportion: 100, ScoreIsNull: true},
+			},
+		},
+		nil,
+		false,
+	)
+
+	if !math.IsNaN(subject.Score) {
+		t.Fatalf("ProcessSubject().Score = %.1f, want NaN", subject.Score)
+	}
+	if !math.IsNaN(subject.GPA) {
+		t.Fatalf("ProcessSubject().GPA = %.1f, want NaN", subject.GPA)
+	}
+
+	result := CalculateGPA([]Subject{subject})
+	if !math.IsNaN(result.WeightedGPA) {
+		t.Fatalf("CalculateGPA().WeightedGPA = %.1f, want NaN when only subject is unreleased", result.WeightedGPA)
+	}
+}

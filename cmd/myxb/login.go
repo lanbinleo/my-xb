@@ -32,18 +32,18 @@ func performLogin(apiClient *api.API, username, password string) error {
 	loginFn := func(user, captcha string) error {
 		return apiClient.Login(user, password, captcha)
 	}
-	return performLoginWithCaptcha(apiClient, username, loginFn, true)
+	return performLoginWithCaptcha(apiClient, username, loginFn, true, true)
 }
 
-func performLoginWithHash(apiClient *api.API, username, passwordHash string) error {
+func performLoginWithHash(apiClient *api.API, username, passwordHash string, verbose bool) error {
 	loginFn := func(user, captcha string) error {
 		return apiClient.LoginWithPasswordHash(user, passwordHash, captcha)
 	}
-	return performLoginWithCaptcha(apiClient, username, loginFn, false)
+	return performLoginWithCaptcha(apiClient, username, loginFn, false, verbose)
 }
 
 // performLoginWithCaptcha handles the common login flow with captcha handling
-func performLoginWithCaptcha(apiClient *api.API, username string, loginFn loginFunc, allowInteractiveCaptcha bool) error {
+func performLoginWithCaptcha(apiClient *api.API, username string, loginFn loginFunc, allowInteractiveCaptcha bool, verbose bool) error {
 	captchaResp, err := apiClient.GetCaptcha()
 	if err != nil {
 		return fmt.Errorf("failed to get captcha: %w", err)
@@ -75,7 +75,9 @@ func performLoginWithCaptcha(apiClient *api.API, username string, loginFn loginF
 		captchaCode = ""
 	}
 
-	printInfo("Logging in...")
+	if verbose {
+		printInfo("Logging in...")
+	}
 	return loginFn(username, captchaCode)
 }
 

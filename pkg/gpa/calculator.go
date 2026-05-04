@@ -44,7 +44,7 @@ func adjustProportionsRecursive(projects []models.EvaluationProject, targetPropo
 	// Calculate total proportion of valid (non-null score) projects
 	totalProportion := 0.0
 	for _, p := range projects {
-		if !p.ScoreIsNull {
+		if hasContributingScore(p) {
 			totalProportion += p.Proportion
 		}
 	}
@@ -55,12 +55,12 @@ func adjustProportionsRecursive(projects []models.EvaluationProject, targetPropo
 
 	// Adjust proportions to sum to targetProportion
 	for i := range projects {
-		if !projects[i].ScoreIsNull {
+		if hasContributingScore(projects[i]) {
 			projects[i].Proportion = projects[i].Proportion / totalProportion * targetProportion
 		}
 
 		// Recursively adjust nested projects
-		if len(projects[i].EvaluationProjectList) > 0 {
+		if len(projects[i].EvaluationProjectList) > 0 && hasContributingScore(projects[i]) {
 			adjustProportionsRecursive(projects[i].EvaluationProjectList, projects[i].Proportion)
 		}
 	}
@@ -69,19 +69,49 @@ func adjustProportionsRecursive(projects []models.EvaluationProject, targetPropo
 // CalculateSubjectScore calculates the total score for a subject recursively
 func CalculateSubjectScore(projects []models.EvaluationProject) float64 {
 	totalScore := 0.0
+	hasScore := false
 
 	for _, project := range projects {
-		if !project.ScoreIsNull {
-			// If has nested projects, recursively calculate from them
-			if len(project.EvaluationProjectList) > 0 {
-				totalScore += CalculateSubjectScore(project.EvaluationProjectList)
-			} else {
-				totalScore += project.Score * project.Proportion / 100.0
+		if !hasContributingScore(project) {
+			continue
+		}
+
+		// If has nested projects, recursively calculate from them
+		if len(project.EvaluationProjectList) > 0 {
+			childScore := CalculateSubjectScore(project.EvaluationProjectList)
+			if !math.IsNaN(childScore) {
+				totalScore += childScore
+				hasScore = true
 			}
+		} else {
+			totalScore += project.Score * project.Proportion / 100.0
+			hasScore = true
 		}
 	}
 
+	if !hasScore {
+		return math.NaN()
+	}
+
 	return totalScore
+}
+
+func hasContributingScore(project models.EvaluationProject) bool {
+	if project.ScoreIsNull {
+		return false
+	}
+
+	if len(project.EvaluationProjectList) == 0 {
+		return true
+	}
+
+	for _, child := range project.EvaluationProjectList {
+		if hasContributingScore(child) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // ScoreToGPA converts a score to GPA using the mapping table
@@ -201,8 +231,10 @@ func ProcessSubject(detail *models.SubjectDetail, dynamicScore *models.DynamicSc
 			subject.OfficialScore = &officialScore
 
 			// Calculate extra credit
-			roundedCalculated := math.Round(subject.Score*10) / 10
-			subject.ExtraCredit = officialScore - roundedCalculated
+			if !math.IsNaN(subject.Score) {
+				roundedCalculated := math.Round(subject.Score*10) / 10
+				subject.ExtraCredit = officialScore - roundedCalculated
+			}
 
 			// Use official score
 			subject.Score = officialScore
