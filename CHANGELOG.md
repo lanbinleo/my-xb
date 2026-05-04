@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.1.0 - 2026-05-04
+
+### Features
+
+- Added task category metadata to `-t/--tasks` output when the Xiaobao task detail endpoint provides evaluation project data.
+- Added safe estimated subject-weight display for task rows when category scores match the average of scored tasks.
+- Added a local task detail metadata cache at `~/.myxb/task_detail_cache.json` plus `--refresh-cache` to rebuild it.
+
+### Changes / Bug Fixes
+
+- Grouped detailed task rows under their evaluation categories instead of showing one flat task list.
+- Preserved uncategorized or unmapped tasks in a separate section so task detail output remains complete.
+- Extended formatted, plain, markdown, and table reports with task category and estimated weight columns where available.
+- Updated Xiaobao API models and documentation for task detail `evaProjects`, task metadata, and evaluation project IDs.
+
+### Chores
+
+- Added regression coverage for task metadata enrichment and category-aware task rendering.
+- Documented task cache behavior and the new `--refresh-cache` flag.
+
 ## v1.0.9 - 2026-05-04
 
 ### Changes / Bug Fixes

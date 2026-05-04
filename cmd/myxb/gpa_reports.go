@@ -21,6 +21,7 @@ type semesterReport struct {
 	OfficialGPA    *float64
 	OfficialGPAErr error
 	Warnings       []string
+	TaskCacheStats taskDetailCacheStats
 }
 
 type jsonOutput struct {
@@ -165,6 +166,10 @@ func collectSingleSemesterReport(apiClient *api.API, semester models.Semester, o
 	calculatedSubjects := []gpa.Subject{}
 	subjectTasksMap := make(map[uint64][]models.TaskItem)
 	warnings := []string{}
+	taskCache, err := loadTaskDetailCache(opts.RefreshTaskCache)
+	if err != nil {
+		return semesterReport{}, fmt.Errorf("failed to load task detail cache: %w", err)
+	}
 
 	logProgress(opts, "Fetching scores for each subject...")
 	if !opts.suppressProgress() {
@@ -181,10 +186,12 @@ func collectSingleSemesterReport(apiClient *api.API, semester models.Semester, o
 			continue
 		}
 
-		detail, err := apiClient.GetTaskDetail(tasks[0].ID)
+		taskDetails := make(map[uint64]*models.SubjectDetail)
+		detail, _, err := taskCache.detailFor(apiClient, tasks[0])
 		if err != nil {
 			return semesterReport{}, fmt.Errorf("failed to get task detail for subject %q (%d), task %d: %w", subject.Name, subject.ID, tasks[0].ID, err)
 		}
+		taskDetails[tasks[0].ID] = detail
 
 		dynamicScore, err := apiClient.GetDynamicScoreDetail(detail.ClassID, subject.ID, semester.ID)
 		if err != nil {
@@ -193,8 +200,25 @@ func collectSingleSemesterReport(apiClient *api.API, semester models.Semester, o
 
 		dynamicInfo := semesterScoreMap[subject.ID]
 		isElective := strings.Contains(subject.Name, ElectiveCourseKeyword)
-		calculatedSubjects = append(calculatedSubjects, gpa.ProcessSubject(detail, dynamicScore, dynamicInfo, isElective))
+		calculatedSubject := gpa.ProcessSubject(detail, dynamicScore, dynamicInfo, isElective)
+		calculatedSubjects = append(calculatedSubjects, calculatedSubject)
+
+		if opts.ShowTasks {
+			for _, task := range tasks[1:] {
+				taskDetail, _, err := taskCache.detailFor(apiClient, task)
+				if err != nil {
+					return semesterReport{}, fmt.Errorf("failed to get task detail for subject %q (%d), task %d: %w", subject.Name, subject.ID, task.ID, err)
+				}
+				taskDetails[task.ID] = taskDetail
+			}
+			tasks = attachTaskDetailMetadata(tasks, taskDetails, calculatedSubject.EvaluationDetails)
+		}
+
 		subjectTasksMap[subject.ID] = tasks
+	}
+
+	if err := taskCache.save(); err != nil {
+		warnings = append(warnings, fmt.Sprintf("Could not save task detail cache: %v", err))
 	}
 
 	result := gpa.CalculateGPA(calculatedSubjects)
@@ -208,6 +232,7 @@ func collectSingleSemesterReport(apiClient *api.API, semester models.Semester, o
 		OfficialGPA:    officialGPA,
 		OfficialGPAErr: officialGPAErr,
 		Warnings:       warnings,
+		TaskCacheStats: taskCache.stats(),
 	}, nil
 }
 
@@ -503,6 +528,10 @@ func renderHumanSummary(report semesterReport, opts gpaCommandOptions) string {
 		out.WriteString(green("✓"))
 		out.WriteString(" ")
 		out.WriteString(fmt.Sprintf("Calculated GPA from %d subjects", len(report.Result.Subjects)))
+		if notice := renderTaskCacheNotice(report.TaskCacheStats, opts, true); notice != "" {
+			out.WriteString("\n\n")
+			out.WriteString(notice)
+		}
 	}
 	return out.String()
 }
@@ -564,18 +593,20 @@ func renderTableReports(reports []semesterReport, opts gpaCommandOptions) string
 				if len(tasks) > 0 {
 					out.WriteString("\n")
 					out.WriteString(paddedColumns(
-						[]int{34, 8, 10, 6},
-						[]string{"Task", "Status", "Score", "Pct"},
+						[]int{34, 8, 10, 6, 26, 8},
+						[]string{"Task", "Status", "Score", "Pct", "Category", "Weight"},
 					))
 					out.WriteString("\n")
 					for _, task := range tasks {
 						out.WriteString(paddedColumns(
-							[]int{34, 8, 10, 6},
+							[]int{34, 8, 10, 6, 26, 8},
 							[]string{
 								asciiDisplayText(task.Name),
 								taskStatusCode(task),
 								taskScoreDisplaySpaced(task),
 								taskPctDisplayForTable(task),
+								taskCategoryDisplay(task),
+								taskWeightDisplay(task),
 							},
 						))
 						out.WriteString("\n")
@@ -626,6 +657,12 @@ func renderPlainReports(reports []semesterReport, opts gpaCommandOptions) string
 					if pct := taskPctDisplay(task); pct != "-" {
 						out.WriteString(" | " + pct + "%")
 					}
+					if category := taskCategoryDisplay(task); category != "-" {
+						out.WriteString(" | " + category)
+					}
+					if weight := taskWeightDisplay(task); weight != "-" {
+						out.WriteString(" | est. weight " + weight)
+					}
 					out.WriteString("\n")
 				}
 			}
@@ -671,6 +708,12 @@ func renderMarkdownReports(reports []semesterReport, opts gpaCommandOptions) str
 					out.WriteString(fmt.Sprintf("- %s: %s, %s", asciiDisplayText(task.Name), taskStatusCode(task), taskScoreDisplaySpaced(task)))
 					if pct := taskPctDisplay(task); pct != "-" {
 						out.WriteString(", " + pct + "%")
+					}
+					if category := taskCategoryDisplay(task); category != "-" {
+						out.WriteString(", " + category)
+					}
+					if weight := taskWeightDisplay(task); weight != "-" {
+						out.WriteString(", est. weight " + weight)
 					}
 					out.WriteString("\n")
 				}
@@ -875,6 +918,24 @@ func renderWarnings(warnings []string, colorized bool) string {
 		out.WriteString("\n")
 	}
 	return out.String()
+}
+
+func renderTaskCacheNotice(stats taskDetailCacheStats, opts gpaCommandOptions, colorized bool) string {
+	if !opts.ShowTasks || opts.Clean || stats.FinalSize == 0 {
+		return ""
+	}
+
+	text := ""
+	if stats.Refresh {
+		text = "Using rebuilt task cache for speed.\nIf scores look stale, run: myxb -t --refresh-cache"
+	} else {
+		text = "Using task cache for speed.\nIf scores look stale, run: myxb -t --refresh-cache"
+	}
+
+	if colorized {
+		return blue("i") + " " + gray(strings.ReplaceAll(text, "\n", "\n  "))
+	}
+	return text
 }
 
 func logProgress(opts gpaCommandOptions, message string) {

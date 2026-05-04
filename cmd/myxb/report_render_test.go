@@ -125,3 +125,93 @@ func TestRenderTableReportsDoesNotInsertBlankLineBetweenSubjects(t *testing.T) {
 		t.Fatalf("renderTableReports output = %s, want no blank line between subjects", rendered)
 	}
 }
+
+func TestRenderSubjectTableGroupsTasksUnderCategories(t *testing.T) {
+	score := 90.0
+	weight := 40.0
+	rendered := renderSubjectTable(
+		gpa.Subject{
+			Name:  "Math",
+			Score: 95,
+			GPA:   4.3,
+			EvaluationDetails: []models.EvaluationProject{
+				{
+					EvaluationProjectID:    10,
+					EvaluationProjectEName: "Continuous Assessments",
+					Proportion:             40,
+					Score:                  90,
+					ScoreLevel:             "A-",
+					GPA:                    3.7,
+				},
+			},
+		},
+		true,
+		[]models.TaskItem{
+			{
+				ID:                     1,
+				Name:                   "Quiz",
+				Score:                  &score,
+				TotalScore:             100,
+				FinishState:            1,
+				CategoryID:             10,
+				EstimatedSubjectWeight: &weight,
+			},
+		},
+	)
+
+	if strings.Contains(rendered, "All Tasks") {
+		t.Fatalf("renderSubjectTable output = %s, want tasks grouped without All Tasks section", rendered)
+	}
+	if !strings.Contains(rendered, "Continuous Assessments") || !strings.Contains(rendered, "Quiz") {
+		t.Fatalf("renderSubjectTable output = %s, want category and task", rendered)
+	}
+	if !strings.Contains(rendered, "- 40.00%") {
+		t.Fatalf("renderSubjectTable output = %s, want estimated task weight", rendered)
+	}
+}
+
+func TestRenderSubjectTableKeepsUncategorizedTasks(t *testing.T) {
+	score := 88.0
+	rendered := renderSubjectTable(
+		gpa.Subject{
+			Name:  "Math",
+			Score: 95,
+			GPA:   4.3,
+			EvaluationDetails: []models.EvaluationProject{
+				{
+					EvaluationProjectID:    10,
+					EvaluationProjectEName: "Continuous Assessments",
+					Proportion:             40,
+					Score:                  90,
+					ScoreLevel:             "A-",
+					GPA:                    3.7,
+				},
+			},
+		},
+		true,
+		[]models.TaskItem{
+			{
+				ID:          1,
+				Name:        "Unmapped Quiz",
+				Score:       &score,
+				TotalScore:  100,
+				FinishState: 1,
+			},
+			{
+				ID:          2,
+				Name:        "Unknown Project Quiz",
+				Score:       &score,
+				TotalScore:  100,
+				FinishState: 1,
+				CategoryID:  99,
+			},
+		},
+	)
+
+	if !strings.Contains(rendered, "Uncategorized Tasks") {
+		t.Fatalf("renderSubjectTable output = %s, want uncategorized task section", rendered)
+	}
+	if !strings.Contains(rendered, "Unmapped Quiz") || !strings.Contains(rendered, "Unknown Project Quiz") {
+		t.Fatalf("renderSubjectTable output = %s, want uncategorized tasks preserved", rendered)
+	}
+}

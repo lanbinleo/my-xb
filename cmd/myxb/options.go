@@ -24,6 +24,7 @@ type gpaCommandOptions struct {
 	SemesterSelector string
 	ExportTarget     string
 	ExportEnabled    bool
+	RefreshTaskCache bool
 }
 
 func normalizeCLIArgs(args []string) []string {
@@ -67,6 +68,7 @@ func parseGPACommandOptions(c *cli.Command) (gpaCommandOptions, error) {
 		Format:           formatHuman,
 		SemesterSelector: strings.TrimSpace(c.String("semester")),
 		ExportTarget:     strings.TrimSpace(c.String("export")),
+		RefreshTaskCache: c.Bool("refresh-cache"),
 	}
 
 	format, err := parseOutputFormat(strings.TrimSpace(strings.ToLower(c.String("formatted"))))

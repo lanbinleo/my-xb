@@ -110,6 +110,16 @@ func GetScheduleCachePath() (string, error) {
 	return filepath.Join(configDir, "schedule_cache.json"), nil
 }
 
+// GetTaskDetailCachePath returns the path used to cache learning task detail metadata.
+func GetTaskDetailCachePath() (string, error) {
+	configDir, err := GetConfigDir()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(configDir, "task_detail_cache.json"), nil
+}
+
 // Load loads the configuration from disk
 func Load() (*Config, error) {
 	configPath, err := GetConfigPath()

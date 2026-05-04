@@ -156,7 +156,14 @@ type TaskData struct {
 }
 
 type TaskItem struct {
-    ID uint64 `json:"id"` // 学习任务ID，用于获取详情
+    ID          uint64   `json:"id"`          // 学习任务ID，用于获取详情
+    Name        string   `json:"name"`        // 任务名称
+    Score       *float64 `json:"score"`       // 得分，可能为null
+    TotalScore  float64  `json:"totalScore"`  // 满分
+    FinishState uint8    `json:"finishState"` // 完成/出分状态
+    TypeName    string   `json:"typeName"`    // 任务类型中文名
+    TypeEName   string   `json:"typeEName"`   // 任务类型英文名
+    SyncTime    string   `json:"syncTime"`    // 同步时间，可用于缓存失效判断
 }
 ```
 
@@ -186,11 +193,24 @@ type SubjectDetail struct {
     ClassID          uint64 `json:"classId"`          // 班级ID
     SubjectID        uint64 `json:"subjectId"`        // 科目ID
     SchoolSemesterID uint64 `json:"schoolSemesterId"` // 学期ID
+    IsInSubjectScore bool   `json:"isInSubjectScore"` // 该任务是否计入课程成绩
+    EvaProjects      []TaskEvaluationProject `json:"evaProjects"` // 该任务所属评分项目路径
+}
+
+type TaskEvaluationProject struct {
+    ID                  uint64  `json:"id"`                  // 评分项目ID，可与DynamicScore中的evaluationProjectId对应
+    Name                string  `json:"name"`                // 中文名
+    EName               string  `json:"eName"`               // 英文名
+    ParentProID         uint64  `json:"parentProId"`         // 父评分项目ID
+    ProPath             string  `json:"proPath"`             // 评分项目路径
+    Proportion          float64 `json:"proportion"`          // 原始比例
+    IsDisplayProportion bool    `json:"isDisplayProportion"` // 前端是否显示比例
 }
 ```
 
 **说明**:
 - 获取到的`ClassID`和`SubjectID`用于获取成绩详情
+- `evaProjects`可用于判断某个具体任务属于哪个category；目前任务列表接口不稳定提供这个信息，因此需要按任务详情补齐
 
 ---
 
@@ -216,6 +236,8 @@ type DynamicScoreData struct {
 }
 
 type EvaluationProject struct {
+    EvaluationProjectID    uint64              `json:"evaluationProjectId"`    // 评分项目ID
+    EvaluationProjectName  string              `json:"evaluationProjectName"`  // 中文名
     EvaluationProjectEName string              `json:"evaluationProjectEName"` // 评分项目名称（英文）
     Proportion             float64             `json:"proportion"`             // 比例（原始百分比）
     Score                  float64             `json:"score"`                  // 分数
@@ -237,6 +259,7 @@ type LearningTask struct {
 - `EvaluationProject`是递归结构，可能包含子评分项目
 - 需要根据`ScoreIsNull`过滤掉没有成绩的项目
 - 比例需要重新计算（见GPA计算文档）
+- 当前实测中，`learningTaskAndExamList`可能为空；若要把每个assignment归入category，需要结合`LearningTask/GetDetail`中的`evaProjects`
 
 ---
 

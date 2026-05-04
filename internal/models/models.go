@@ -73,6 +73,21 @@ type TaskItem struct {
 	EvaluationProjectEName string   `json:"evaluationProjectEName"`
 	EvaluationProjectID    uint64   `json:"evaluationProjectId"`
 	FinishState            uint8    `json:"finishState"`
+	BeginTime              string   `json:"beginTime"`
+	EndTime                string   `json:"endTime"`
+	SyncTime               string   `json:"syncTime"`
+	LearningTaskState      uint8    `json:"learningTaskState"`
+	TypeName               string   `json:"typeName"`
+	TypeEName              string   `json:"typeEName"`
+	ScoreType              uint8    `json:"scoreType"`
+	LevelString            string   `json:"levelString"`
+	IsExempt               bool     `json:"isExempt"`
+	CategoryID             uint64   `json:"category_id,omitempty"`
+	CategoryName           string   `json:"category_name,omitempty"`
+	CategoryEName          string   `json:"category_ename,omitempty"`
+	CategoryProportion     float64  `json:"category_proportion,omitempty"`
+	EstimatedSubjectWeight *float64 `json:"estimated_subject_weight,omitempty"`
+	IsInSubjectScore       *bool    `json:"is_in_subject_score,omitempty"`
 }
 
 // TaskDetailResponse represents the task detail API response
@@ -84,10 +99,24 @@ type TaskDetailResponse struct {
 
 // SubjectDetail contains detailed information about a subject
 type SubjectDetail struct {
-	SubjectName      string `json:"subjectName"`
-	ClassID          uint64 `json:"classId"`
-	SubjectID        uint64 `json:"subjectId"`
-	SchoolSemesterID uint64 `json:"schoolSemesterId"`
+	SubjectName      string                  `json:"subjectName"`
+	ClassID          uint64                  `json:"classId"`
+	SubjectID        uint64                  `json:"subjectId"`
+	SchoolSemesterID uint64                  `json:"schoolSemesterId"`
+	LearningTaskName string                  `json:"learningTaskName"`
+	IsInSubjectScore bool                    `json:"isInSubjectScore"`
+	EvaProjects      []TaskEvaluationProject `json:"evaProjects"`
+}
+
+// TaskEvaluationProject is the category metadata attached to one learning task detail.
+type TaskEvaluationProject struct {
+	ID                  uint64  `json:"id"`
+	Name                string  `json:"name"`
+	EName               string  `json:"eName"`
+	ParentProID         uint64  `json:"parentProId"`
+	ProPath             string  `json:"proPath"`
+	Proportion          float64 `json:"proportion"`
+	IsDisplayProportion bool    `json:"isDisplayProportion"`
 }
 
 // DynamicScoreResponse represents the dynamic score API response
@@ -105,6 +134,8 @@ type DynamicScoreData struct {
 // EvaluationProject represents an evaluation project (can be nested)
 type EvaluationProject struct {
 	EvaluationProjectEName  string              `json:"evaluationProjectEName"`
+	EvaluationProjectName   string              `json:"evaluationProjectName"`
+	EvaluationProjectID     uint64              `json:"evaluationProjectId"`
 	Proportion              float64             `json:"proportion"`
 	Score                   float64             `json:"score"`
 	ScoreLevel              string              `json:"scoreLevel"`

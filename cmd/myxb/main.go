@@ -11,7 +11,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-var version = "1.0.9"
+var version = "1.1.0"
 
 func main() {
 	cmd := &cli.Command{
@@ -28,6 +28,10 @@ func main() {
 				Name:    "tasks",
 				Aliases: []string{"t"},
 				Usage:   "Show detailed task information for each subject",
+			},
+			&cli.BoolFlag{
+				Name:  "refresh-cache",
+				Usage: "Rebuild cached task detail metadata used by --tasks",
 			},
 			&cli.BoolFlag{
 				Name:    "clean",

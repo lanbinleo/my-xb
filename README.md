@@ -54,7 +54,7 @@ This will:
 
 Useful flags:
 
-- `-t, --tasks` - include detailed task rows
+- `-t, --tasks` - include detailed task rows, with task category and estimated subject-weight contribution when safely inferable
 - `-f, --formatted` - choose output format only; bare `-f` defaults to `table`
 - `-c, --clean` - suppress banner, prompts, progress, and other human-oriented output; without `-s`, defaults to the current semester
 - `-s, --semester` - select semester(s) without interactive prompts
@@ -64,6 +64,7 @@ Examples:
 
 ```bash
 ./myxb -t
+./myxb -t --refresh-cache
 ./myxb -f
 ./myxb -f plain
 ./myxb -f markdown
@@ -173,6 +174,10 @@ All other courses use non-weighted scale (max 4.3).
 Credentials are stored in:
 - Windows: `%USERPROFILE%\.myxb\config.json`
 - Linux/Mac: `~/.myxb/config.json`
+
+Task detail metadata used by `--tasks` is cached locally in `~/.myxb/task_detail_cache.json`.
+The cache stores task category metadata, not raw passwords, and avoids refetching every task detail on each run.
+Use `--refresh-cache` with `--tasks` to rebuild it.
 
 The config file contains:
 ```json
