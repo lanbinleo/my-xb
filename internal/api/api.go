@@ -292,3 +292,46 @@ func (a *API) ListScheduleByParent(beginTime, endTime string) ([]models.Schedule
 
 	return resp.Data, nil
 }
+
+// GetAttendanceStatistic retrieves overall attendance counts and rate for a
+// date range. AttendanceType=7 matches the web client's class attendance view.
+func (a *API) GetAttendanceStatistic(beginTime, endTime string) (*models.AttendanceStatisticData, error) {
+	queryParams := map[string]string{
+		"BeginTime":      beginTime,
+		"EndTime":        endTime,
+		"AttendanceType": "7",
+	}
+
+	var resp models.AttendanceStatisticResponse
+	err := a.client.GetJSON("/api/Attendance/GetAttendanceStatistic", queryParams, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := checkAPIResponse(resp.State, resp.Msg); err != nil {
+		return nil, err
+	}
+
+	return &resp.Data, nil
+}
+
+// GetSubjectAttendanceStatistic retrieves per-subject attendance counts for a
+// date range.
+func (a *API) GetSubjectAttendanceStatistic(beginTime, endTime string) ([]models.SubjectAttendanceStat, error) {
+	queryParams := map[string]string{
+		"BeginTime": beginTime,
+		"EndTime":   endTime,
+	}
+
+	var resp models.SubjectAttendanceStatisticResponse
+	err := a.client.GetJSON("/api/Attendance/GetSubjectAttendanceStatistic", queryParams, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := checkAPIResponse(resp.State, resp.Msg); err != nil {
+		return nil, err
+	}
+
+	return resp.Data, nil
+}

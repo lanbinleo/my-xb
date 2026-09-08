@@ -86,6 +86,7 @@ func main() {
 				},
 			},
 			newScheduleCommand(),
+			newAttendanceCommand(),
 		}, newScheduleShortcutCommands()...),
 		Before: func(ctx context.Context, c *cli.Command) (context.Context, error) {
 			opts, err := parseGPACommandOptions(c)

@@ -40,6 +40,7 @@ go build -o myxb.exe ./cmd/myxb
   - `client/` - HTTP client with automatic cookie management
   - `config/` - Credential storage (~/.myxb/config.json)
   - `schedule/` - Timetable service: week fetch/cache (~/.myxb/schedule_cache.json), day/week views, bell-schedule profiles
+  - `attendance/` - Attendance service: school-year range resolution and attendance-rate views (no cache)
   - `models/` - Data structures for API requests/responses
 
 - `pkg/gpa/` - Public GPA calculation logic
@@ -54,6 +55,12 @@ go build -o myxb.exe ./cmd/myxb
 2. `cmd/myxb/schedule.go` builds the service with a lazy provider: login only runs when the week cache misses (30-minute TTL, account-scoped, expired weeks pruned on save)
 3. `internal/schedule.Service` fetches one Monday-Sunday week via `/api/Schedule/ListScheduleByParent`, builds `DayView`/`WeekView`, applies the bell-schedule profile (`highschool` overrides period 1-8 times; `standard` keeps API times and only pads free blocks)
 4. Profiles default to `standard` with a hint when unset; `myxb schedule profile <standard|highschool>` persists the choice in `~/.myxb/config.json`
+
+### Attendance Flow
+
+1. `myxb attendance` (alias `att`) resolves the current term from `GetSchoolSemesters` — the `isNow` semester's own start/end dates (its entry already spans the whole school year; `semester=2` is the following Feb-July segment)
+2. `internal/attendance.Service` fetches `/api/Attendance/GetAttendanceStatistic` (overall rate/counts) and `/api/Attendance/GetSubjectAttendanceStatistic` (per-subject table) — always fresh, no local cache
+3. Rendering colors the rate by threshold and sorts subjects by absent count descending
 
 ### Key Data Flow
 
@@ -130,6 +137,8 @@ Critical endpoints (in order of typical usage):
 8. `/api/DynamicScore/GetStuSemesterDynamicScore` - Get official scores and IsInGrade flags
 9. `/api/DynamicScore/GetGpa` - Get official GPA for comparison
 10. `/api/Schedule/ListScheduleByParent` - Weekly timetable for schedule/calendar commands
+11. `/api/Attendance/GetAttendanceStatistic` - Overall attendance rate for a date range
+12. `/api/Attendance/GetSubjectAttendanceStatistic` - Per-subject attendance counts for a date range
 
 See `API_DOCUMENTATION.md` and `GPA_CALCULATION.md` for detailed specifications.
 

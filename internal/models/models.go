@@ -232,3 +232,42 @@ type ScheduleClassInfo struct {
 	Grade      int    `json:"grade"`
 	ClassCode  string `json:"classCode"`
 }
+
+// AttendanceStatisticResponse represents the overall attendance statistic API response.
+type AttendanceStatisticResponse struct {
+	State int                     `json:"state"`
+	Msg   string                  `json:"msg"`
+	Data  AttendanceStatisticData `json:"data"`
+}
+
+// AttendanceStatisticData contains overall attendance counts and rate.
+type AttendanceStatisticData struct {
+	TotalCount     int                    `json:"totalCount"`
+	StateCountList []AttendanceStateCount `json:"sataeCountList"` // API field is misspelled "satae"
+	AttendanceRate float64                `json:"attendanceRate"`
+}
+
+// AttendanceStateCount counts sessions per attendance state
+// (0 = normal, 3 = absent observed in captures; others unknown).
+type AttendanceStateCount struct {
+	AttendanceState int `json:"attendanceState"`
+	Count           int `json:"count"`
+}
+
+// SubjectAttendanceStatisticResponse represents the per-subject attendance API response.
+type SubjectAttendanceStatisticResponse struct {
+	State int                     `json:"state"`
+	Msg   string                  `json:"msg"`
+	Data  []SubjectAttendanceStat `json:"data"`
+}
+
+// SubjectAttendanceStat contains attendance counts for one subject.
+type SubjectAttendanceStat struct {
+	SubjectID       uint64 `json:"subjectId"`
+	SubjectName     string `json:"subjectName"`
+	SubjectEName    string `json:"subjectEName"`
+	NormalCount     int    `json:"normalCount"`
+	LateCount       int    `json:"lateCount"`
+	EarlyLeaveCount int    `json:"earlyLeaveCount"`
+	AbsentCount     int    `json:"absentCount"`
+}

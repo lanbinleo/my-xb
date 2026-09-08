@@ -4,6 +4,7 @@
 
 ### Features
 
+- Added `myxb attendance` (alias `att`): overall attendance rate, per-state counts, and a per-subject attendance table for the current school year, sorted by absent count descending.
 - Added the week timetable grid: `myxb week` (also `myxb schedule week`) renders Monday-Sunday by period with today's column highlighted, free blocks, and rooms — no extra API calls.
 - Made the week grid the default view for `myxb schedule` (aliases: `s`, `cal`, `calendar`).
 - Added top-level shortcuts `myxb now`, `myxb next`, `myxb day`, and `myxb week` so common timetable queries no longer need the `schedule` group name.

@@ -378,6 +378,78 @@ type ScheduleTeacher struct {
 
 ---
 
+### 11. 获取总体考勤统计
+
+**端点**: `GET /api/Attendance/GetAttendanceStatistic`
+
+**查询参数**:
+- `BeginTime`: 格式 `"2026-06-23 00:00:00"`（空格分隔）
+- `EndTime`: 格式 `"2027-02-20 23:59:59"`
+- `AttendanceType`: `7`（网页端考勤页使用的固定值，含义未 documented）
+
+**响应结构**:
+```go
+type AttendanceStatisticResponse struct {
+    State int                     `json:"state"`
+    Msg   string                  `json:"msg"`
+    Data  AttendanceStatisticData `json:"data"`
+}
+
+type AttendanceStatisticData struct {
+    TotalCount     int                    `json:"totalCount"`
+    StateCountList []AttendanceStateCount `json:"sataeCountList"` // API 字段拼写就是 "satae"
+    AttendanceRate float64                `json:"attendanceRate"` // 0-100，如 82.98
+}
+
+type AttendanceStateCount struct {
+    AttendanceState int `json:"attendanceState"` // 0=正常, 3=缺勤（已观测；其余值含义未知）
+    Count           int `json:"count"`
+}
+```
+
+**响应示例**:
+```json
+{"data":{"totalCount":47,"sataeCountList":[{"attendanceState":0,"count":39},{"attendanceState":3,"count":8}],"attendanceRate":82.98},"state":0}
+```
+
+**说明**:
+- 时间范围取当前 `isNow` 学期自身的 `startDate` ~ `endDate`（该校的 `semester=1` 条目本身覆盖整个学年，如 2026-06-23 ~ 2027-02-20；`semester=2` 是次年 2~7 月的下一段）
+- `attendanceRate` 与 `normal/total` 精确吻合（39/47 = 82.98%），即迟到/早退在抓包样本中未出现，是否计入比率未知
+
+---
+
+### 12. 获取各科目考勤统计
+
+**端点**: `GET /api/Attendance/GetSubjectAttendanceStatistic`
+
+**查询参数**:
+- `BeginTime` / `EndTime`: 同上（无 `AttendanceType` 参数）
+
+**响应结构**:
+```go
+type SubjectAttendanceStatisticResponse struct {
+    State int                      `json:"state"`
+    Msg   string                   `json:"msg"`
+    Data  []SubjectAttendanceStat `json:"data"`
+}
+
+type SubjectAttendanceStat struct {
+    SubjectID       uint64 `json:"subjectId"`
+    SubjectName     string `json:"subjectName"`
+    SubjectEName    string `json:"subjectEName"`
+    NormalCount     int    `json:"normalCount"`
+    LateCount       int    `json:"lateCount"`
+    EarlyLeaveCount int    `json:"earlyLeaveCount"`
+    AbsentCount     int    `json:"absentCount"`
+}
+```
+
+**说明**:
+- 各科目计数之和与总体端点精确一致（normal 合计 39、absent 合计 8、total 47）
+- 每科 `Total = Normal + Late + EarlyLeave + Absent`，客户端据此计算单科出勤率
+
+---
+
 ## 典型API调用流程
 
 ```
@@ -399,6 +471,8 @@ type ScheduleTeacher struct {
 7. GetGpa (获取官方GPA，用于对比)
    ↓
 8. ListScheduleByParent (按日期范围获取一周课表)
+   ↓
+9. GetAttendanceStatistic / GetSubjectAttendanceStatistic (按学年获取考勤统计)
 ```
 
 ---

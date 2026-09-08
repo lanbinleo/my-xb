@@ -117,6 +117,7 @@ Export path behavior:
 - `myxb next` - Show the next class for today
 - `myxb day friday` - Show the timetable for a weekday in the current week
 - `myxb day 2026-04-03` - Show the timetable for a specific date
+- `myxb attendance` - Show your attendance rate for the current school year
 - `myxb schedule profile highschool` - Save the high-school bell schedule profile
 - `myxb help` - Show help message
 
@@ -228,6 +229,20 @@ Notes:
   - `B8` `15:05-15:45`
 - `standard` keeps the raw begin/end times returned by Xiaobao
 - `--refresh` bypasses the local cache when you want a fresh fetch
+
+### Attendance
+
+`myxb attendance` (alias `myxb att`) shows your attendance rate for the current school year:
+
+```bash
+./myxb attendance
+```
+
+Notes:
+
+- The time range spans the whole school year (every semester of the current semester's year), matching the web client's attendance page
+- The summary (total sessions, per-state counts, overall rate) comes from `/api/Attendance/GetAttendanceStatistic`; the per-subject table comes from `/api/Attendance/GetSubjectAttendanceStatistic` and is sorted by absent count descending
+- Per-subject rate divides normal attendance by total sessions; attendance data is always fetched fresh with no local cache
 
 ### Building
 
