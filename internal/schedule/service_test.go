@@ -3,6 +3,9 @@ package schedule
 import (
 	"myxb/internal/config"
 	"myxb/internal/models"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -25,6 +28,14 @@ func TestResolveDaySupportsDateAndWeekdayAliases(t *testing.T) {
 		{input: "周五", want: "2026-04-03"},
 		{input: "today", want: "2026-04-01"},
 		{input: "明天", want: "2026-04-02"},
+		{input: "yesterday", want: "2026-03-31"},
+		{input: "昨天", want: "2026-03-31"},
+		{input: "next friday", want: "2026-04-10"},
+		{input: "下周五", want: "2026-04-10"},
+		{input: "下星期一", want: "2026-04-06"},
+		{input: "next week", want: "2026-04-06"},
+		{input: "next", want: "2026-04-06"},
+		{input: "下周", want: "2026-04-06"},
 	}
 
 	for _, tt := range tests {
@@ -144,6 +155,100 @@ func TestGetDayViewSeparatesCacheByAccount(t *testing.T) {
 
 	if provider.calls != 2 {
 		t.Fatalf("provider call count = %d, want 2 for separate account caches", provider.calls)
+	}
+}
+
+func TestGetDayViewIgnoresMalformedItemsFromOtherDays(t *testing.T) {
+	now := mustSchoolTime(t, "2026-04-02T08:10:00")
+	provider := &fakeProvider{
+		items: []models.ScheduleItem{
+			{ID: 1, Name: "AP Statistics", BeginTime: "2026-04-02T08:25:00", EndTime: "2026-04-02T09:05:00", FormalCourseOrder: 1, ScheduleType: 4},
+			{ID: 2, Name: "Broken Item", BeginTime: "2026-04-03-not-a-time", EndTime: "2026-04-04T09:00:00", FormalCourseOrder: 1, ScheduleType: 4},
+		},
+	}
+
+	service := NewServiceWithDependencies(provider, &memoryCache{}, func() time.Time { return now }, "alice")
+	view, err := service.GetDayView(now, config.ScheduleProfileStandard, false)
+	if err != nil {
+		t.Fatalf("GetDayView returned error: %v", err)
+	}
+	if len(view.Entries) == 0 || view.Entries[0].ID != 1 {
+		t.Fatalf("GetDayView entries = %+v, want the valid item only", view.Entries)
+	}
+}
+
+func TestGetWeekViewFetchesOnceAndBuildsSevenDays(t *testing.T) {
+	now := mustSchoolTime(t, "2026-04-02T08:30:00") // Thursday, inside period 1
+	provider := &fakeProvider{
+		items: []models.ScheduleItem{
+			{ID: 1, Name: "AP Statistics", BeginTime: "2026-03-30T08:25:00", EndTime: "2026-03-30T09:05:00", FormalCourseOrder: 1, ScheduleType: 4},
+			{ID: 2, Name: "AP English", BeginTime: "2026-04-02T08:25:00", EndTime: "2026-04-02T09:05:00", FormalCourseOrder: 1, ScheduleType: 4},
+		},
+	}
+
+	service := NewServiceWithDependencies(provider, &memoryCache{}, func() time.Time { return now }, "alice")
+	view, err := service.GetWeekView(now, config.ScheduleProfileStandard, false)
+	if err != nil {
+		t.Fatalf("GetWeekView returned error: %v", err)
+	}
+
+	if provider.calls != 1 {
+		t.Fatalf("provider call count = %d, want 1", provider.calls)
+	}
+	if len(view.Days) != 7 {
+		t.Fatalf("week day count = %d, want 7", len(view.Days))
+	}
+	if view.Begin.Format(dateLayout) != "2026-03-30" {
+		t.Fatalf("week begin = %s, want 2026-03-30 (Monday)", view.Begin.Format(dateLayout))
+	}
+	if view.Days[0].Date.Weekday() != time.Monday {
+		t.Fatalf("first day weekday = %s, want Monday", view.Days[0].Date.Weekday())
+	}
+	if view.Days[0].Entries[0].ID != 1 {
+		t.Fatalf("Monday entry = %+v, want ID 1", view.Days[0].Entries)
+	}
+	if view.Today == nil || view.Today.Date.Format(dateLayout) != "2026-04-02" {
+		t.Fatalf("Today pointer = %+v, want 2026-04-02", view.Today)
+	}
+	if view.Today.Current == nil || view.Today.Current.ID != 2 {
+		t.Fatalf("Today current entry = %+v, want ID 2", view.Today.Current)
+	}
+}
+
+func TestFileCachePrunesExpiredWeeksOnSave(t *testing.T) {
+	current := time.Date(2026, 4, 2, 8, 0, 0, 0, time.UTC)
+	cache := &fileCache{
+		path: filepath.Join(t.TempDir(), "schedule_cache.json"),
+		now:  func() time.Time { return current },
+	}
+
+	oldBegin, oldEnd := "2026-03-23", "2026-03-29"
+	newBegin, newEnd := "2026-03-30", "2026-04-05"
+	items := []models.ScheduleItem{{ID: 1, Name: "AP Statistics"}}
+
+	if err := cache.SaveWeek("alice", oldBegin, oldEnd, items); err != nil {
+		t.Fatalf("first SaveWeek returned error: %v", err)
+	}
+
+	// Jump past the TTL so the first week expires before the next save.
+	current = current.Add(defaultCacheTTL + time.Minute)
+	if err := cache.SaveWeek("alice", newBegin, newEnd, items); err != nil {
+		t.Fatalf("second SaveWeek returned error: %v", err)
+	}
+
+	if _, hit, err := cache.LoadWeek("alice", oldBegin, oldEnd, defaultCacheTTL); err != nil || hit {
+		t.Fatalf("expired week load = hit %v (err %v), want miss", hit, err)
+	}
+	if _, hit, err := cache.LoadWeek("alice", newBegin, newEnd, defaultCacheTTL); err != nil || !hit {
+		t.Fatalf("fresh week load = hit %v (err %v), want hit", hit, err)
+	}
+
+	data, err := os.ReadFile(cache.path)
+	if err != nil {
+		t.Fatalf("ReadFile returned error: %v", err)
+	}
+	if strings.Contains(string(data), oldBegin) {
+		t.Fatalf("cache file still contains the expired week:\n%s", data)
 	}
 }
 

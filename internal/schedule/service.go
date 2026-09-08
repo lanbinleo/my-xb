@@ -118,6 +118,14 @@ type DayView struct {
 	IsToday bool
 }
 
+// WeekView is the Monday-start week schedule with one DayView per day.
+type WeekView struct {
+	Begin   time.Time
+	Profile string
+	Days    []DayView
+	Today   *DayView
+}
+
 // ProfileLabel renders a friendly label for the saved schedule profile.
 func ProfileLabel(profile string) string {
 	switch config.NormalizeScheduleProfile(profile) {
@@ -195,13 +203,46 @@ func (s *Service) GetDayView(target time.Time, profile string, refresh bool) (Da
 		return DayView{}, err
 	}
 
+	return s.buildDayView(items, target, profile, s.now().In(s.location))
+}
+
+// GetWeekView returns the schedule for the Monday-start week containing target.
+func (s *Service) GetWeekView(target time.Time, profile string, refresh bool) (WeekView, error) {
+	items, err := s.fetchWeek(target, refresh)
+	if err != nil {
+		return WeekView{}, err
+	}
+
+	begin := startOfWeek(target.In(s.location))
+	now := s.now().In(s.location)
+	view := WeekView{
+		Begin:   begin,
+		Profile: normalizedProfile(profile),
+		Days:    make([]DayView, 0, 7),
+	}
+
+	for offset := 0; offset < 7; offset++ {
+		day := begin.AddDate(0, 0, offset)
+		dayView, err := s.buildDayView(items, day, profile, now)
+		if err != nil {
+			return WeekView{}, err
+		}
+		view.Days = append(view.Days, dayView)
+		if dayView.IsToday {
+			view.Today = &view.Days[len(view.Days)-1]
+		}
+	}
+
+	return view, nil
+}
+
+func (s *Service) buildDayView(items []models.ScheduleItem, target time.Time, profile string, now time.Time) (DayView, error) {
 	target = startOfDay(target.In(s.location))
 	entries, err := s.entriesForDay(items, target, profile)
 	if err != nil {
 		return DayView{}, err
 	}
 
-	now := s.now().In(s.location)
 	view := DayView{
 		Date:    target,
 		Profile: normalizedProfile(profile),
@@ -230,66 +271,92 @@ func ResolveDay(input string, now time.Time, location *time.Location) (time.Time
 	if value == "tomorrow" || value == "明天" {
 		return startOfDay(now.AddDate(0, 0, 1)), nil
 	}
+	if value == "yesterday" || value == "昨天" {
+		return startOfDay(now.AddDate(0, 0, -1)), nil
+	}
+	if value == "nextweek" || value == "next week" || value == "next" || value == "下周" {
+		return startOfWeek(now).AddDate(0, 0, 7), nil
+	}
 
 	if parsed, err := time.ParseInLocation(dateLayout, input, location); err == nil {
 		return startOfDay(parsed), nil
 	}
 
-	if weekday, ok := weekdayAliases()[value]; ok {
+	if weekday, nextWeek, ok := parseWeekdaySelector(value); ok {
 		weekStart := startOfWeek(now)
 		offset := int(weekday - time.Monday)
 		if weekday == time.Sunday {
 			offset = 6
 		}
-		return weekStart.AddDate(0, 0, offset), nil
+		day := weekStart.AddDate(0, 0, offset)
+		if nextWeek {
+			day = day.AddDate(0, 0, 7)
+		}
+		return day, nil
 	}
 
-	return time.Time{}, fmt.Errorf("invalid day selector %q: use YYYY-MM-DD, today, tomorrow, monday, or 周一", input)
+	return time.Time{}, fmt.Errorf("invalid day selector %q: use YYYY-MM-DD, today, tomorrow, yesterday, monday, 下周五, or next week", input)
 }
 
-func weekdayAliases() map[string]time.Weekday {
-	return map[string]time.Weekday{
-		"monday":    time.Monday,
-		"mon":       time.Monday,
-		"周一":        time.Monday,
-		"星期一":       time.Monday,
-		"礼拜一":       time.Monday,
-		"tuesday":   time.Tuesday,
-		"tue":       time.Tuesday,
-		"tues":      time.Tuesday,
-		"周二":        time.Tuesday,
-		"星期二":       time.Tuesday,
-		"礼拜二":       time.Tuesday,
-		"wednesday": time.Wednesday,
-		"wed":       time.Wednesday,
-		"周三":        time.Wednesday,
-		"星期三":       time.Wednesday,
-		"礼拜三":       time.Wednesday,
-		"thursday":  time.Thursday,
-		"thu":       time.Thursday,
-		"thur":      time.Thursday,
-		"thurs":     time.Thursday,
-		"周四":        time.Thursday,
-		"星期四":       time.Thursday,
-		"礼拜四":       time.Thursday,
-		"friday":    time.Friday,
-		"fri":       time.Friday,
-		"周五":        time.Friday,
-		"星期五":       time.Friday,
-		"礼拜五":       time.Friday,
-		"saturday":  time.Saturday,
-		"sat":       time.Saturday,
-		"周六":        time.Saturday,
-		"星期六":       time.Saturday,
-		"礼拜六":       time.Saturday,
-		"sunday":    time.Sunday,
-		"sun":       time.Sunday,
-		"周日":        time.Sunday,
-		"周天":        time.Sunday,
-		"星期日":       time.Sunday,
-		"星期天":       time.Sunday,
-		"礼拜天":       time.Sunday,
+// parseWeekdaySelector resolves a weekday alias, reporting whether the
+// selector points at next week ("next friday" or "下周五").
+func parseWeekdaySelector(value string) (weekday time.Weekday, nextWeek bool, ok bool) {
+	alias := value
+	if rest, cut := strings.CutPrefix(alias, "next "); cut {
+		alias = strings.TrimSpace(rest)
+		nextWeek = true
+	} else if rest, cut := strings.CutPrefix(alias, "下"); cut && rest != "" {
+		// 下周一 / 下星期一 / 下礼拜一 — only a full weekday alias after 下
+		// counts as a next-week selector.
+		weekday, ok := weekdayAliasMap[rest]
+		return weekday, true, ok
 	}
+
+	weekday, ok = weekdayAliasMap[alias]
+	return weekday, nextWeek, ok
+}
+
+var weekdayAliasMap = map[string]time.Weekday{
+	"monday":    time.Monday,
+	"mon":       time.Monday,
+	"周一":        time.Monday,
+	"星期一":       time.Monday,
+	"礼拜一":       time.Monday,
+	"tuesday":   time.Tuesday,
+	"tue":       time.Tuesday,
+	"tues":      time.Tuesday,
+	"周二":        time.Tuesday,
+	"星期二":       time.Tuesday,
+	"礼拜二":       time.Tuesday,
+	"wednesday": time.Wednesday,
+	"wed":       time.Wednesday,
+	"周三":        time.Wednesday,
+	"星期三":       time.Wednesday,
+	"礼拜三":       time.Wednesday,
+	"thursday":  time.Thursday,
+	"thu":       time.Thursday,
+	"thur":      time.Thursday,
+	"thurs":     time.Thursday,
+	"周四":        time.Thursday,
+	"星期四":       time.Thursday,
+	"礼拜四":       time.Thursday,
+	"friday":    time.Friday,
+	"fri":       time.Friday,
+	"周五":        time.Friday,
+	"星期五":       time.Friday,
+	"礼拜五":       time.Friday,
+	"saturday":  time.Saturday,
+	"sat":       time.Saturday,
+	"周六":        time.Saturday,
+	"星期六":       time.Saturday,
+	"礼拜六":       time.Saturday,
+	"sunday":    time.Sunday,
+	"sun":       time.Sunday,
+	"周日":        time.Sunday,
+	"周天":        time.Sunday,
+	"星期日":       time.Sunday,
+	"星期天":       time.Sunday,
+	"礼拜天":       time.Sunday,
 }
 
 func (s *Service) fetchWeek(target time.Time, refresh bool) ([]models.ScheduleItem, error) {
@@ -317,8 +384,14 @@ func (s *Service) fetchWeek(target time.Time, refresh bool) ([]models.ScheduleIt
 func (s *Service) entriesForDay(items []models.ScheduleItem, target time.Time, profile string) ([]Entry, error) {
 	profile = normalizedProfile(profile)
 	entries := make([]Entry, 0)
+	dayPrefix := target.Format(dateLayout)
 
 	for _, item := range items {
+		// Filter by date prefix before parsing so malformed items from other
+		// days cannot break this day's view.
+		if !strings.HasPrefix(item.BeginTime, dayPrefix) {
+			continue
+		}
 		begin, err := time.ParseInLocation(scheduleTimeLayout, item.BeginTime, s.location)
 		if err != nil {
 			return nil, fmt.Errorf("parse schedule begin time %q: %w", item.BeginTime, err)
@@ -630,6 +703,14 @@ func (c *fileCache) SaveWeek(accountKey, beginTime, endTime string, items []mode
 
 	if cacheData.Weeks == nil {
 		cacheData.Weeks = map[string]cacheWeek{}
+	}
+
+	// Drop expired weeks so the cache file does not grow without bound.
+	for key, week := range cacheData.Weeks {
+		fetchedAt, err := time.Parse(time.RFC3339, week.FetchedAt)
+		if err != nil || c.now().After(fetchedAt.Add(defaultCacheTTL)) {
+			delete(cacheData.Weeks, key)
+		}
 	}
 
 	cacheData.Weeks[weekKey(accountKey, beginTime, endTime)] = cacheWeek{

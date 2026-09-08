@@ -9,7 +9,7 @@ This project is a refactor project of [tls-xb](https://github.com/hey2022/tls-xb
 - Login to Xiaobao with automatic credential storage
 - Calculate weighted and unweighted GPA
 - View detailed subject scores and grades
-- View today's timetable, the current class, and the next class
+- View the weekly timetable grid, the current class, and the next class (`myxb week`, `myxb now`, `myxb next`)
 - Support readable formatted output modes and JSON export
 - Support non-interactive semester selection, including multiple semesters / full school years
 - Support clean output mode for scripting and automation
@@ -112,13 +112,15 @@ Export path behavior:
 
 - `myxb` - Calculate GPA (default command)
 - `myxb login` - Login and save credentials
-- `myxb schedule` - Show today's timetable with current/next class highlights
-- `myxb schedule now` - Show the class currently in session
-- `myxb schedule next` - Show the next class for today
-- `myxb schedule day friday` - Show the timetable for a weekday in the current week
-- `myxb schedule day 2026-04-03` - Show the timetable for a specific date
+- `myxb week` - Show this week's timetable grid (shortcut for `myxb schedule week`)
+- `myxb now` - Show the class currently in session
+- `myxb next` - Show the next class for today
+- `myxb day friday` - Show the timetable for a weekday in the current week
+- `myxb day 2026-04-03` - Show the timetable for a specific date
 - `myxb schedule profile highschool` - Save the high-school bell schedule profile
 - `myxb help` - Show help message
+
+`myxb schedule` (aliases: `myxb s`, `myxb cal`, `myxb calendar`) groups the same views: `now`, `next`, `day`, `week`, and `profile`.
 
 ## Project Structure
 
@@ -192,27 +194,29 @@ To reset credentials, delete this file or run `myxb login` again.
 
 ### Schedule / Timetable
 
-The schedule command reads Xiaobao's `/api/Schedule/ListScheduleByParent` endpoint and caches the current school week locally.
+The schedule commands read Xiaobao's `/api/Schedule/ListScheduleByParent` endpoint and cache the current school week locally. When the cache is still fresh, timetable queries skip the login round trip entirely and return instantly; `--refresh` forces a fresh fetch.
 
 Useful commands:
 
 ```bash
-./myxb schedule profile standard
-./myxb schedule
-./myxb schedule now
-./myxb schedule next
-./myxb schedule day friday
-./myxb schedule day 2026-04-03
-./myxb schedule -d 周四
-./myxb schedule --refresh
+./myxb week                 # this week's grid (today's column highlighted)
+./myxb now                  # class in session right now
+./myxb next                 # next class today
+./myxb day friday           # a weekday in the current week
+./myxb day 2026-04-03       # a specific date
+./myxb week next            # next week's grid
+./myxb day 下周五            # next Friday
+./myxb schedule -d 周四      # same views via the schedule group
+./myxb week --refresh
 ./myxb schedule profile highschool
 ```
 
 Notes:
 
-- First-time timetable use requires choosing a profile with `myxb schedule profile standard` or `myxb schedule profile highschool`
-- `myxb schedule` defaults to today's timetable and highlights `NOW` / `NEXT`
-- `myxb schedule day ...` accepts `YYYY-MM-DD`, English weekdays, Chinese weekdays, `today`, and `tomorrow`
+- `myxb schedule` (aliases `s`, `cal`, `calendar`) defaults to the week grid; `myxb day` shows one day's full table with `NOW` / `NEXT` markers and untruncated course names
+- Week-grid cells show the course (and room); long names are truncated to keep the grid readable — use `myxb day <selector>` for full names
+- Selectors accept `YYYY-MM-DD`, English weekdays, Chinese weekdays, `today`, `tomorrow`, `yesterday`, `next <weekday>`, `下周一`-style next-week names, and `next week` / `下周`
+- Without a saved profile, timetable commands default to `standard` and print a hint; set one permanently with `myxb schedule profile standard` or `myxb schedule profile highschool`
 - `myxb schedule profile highschool` adjusts periods 1-8 to the high-school bell schedule:
   - `P1` `08:00-08:40`
   - `P2` `08:40-09:20`

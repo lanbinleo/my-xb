@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.2.0 - 2026-09-08
+
+### Features
+
+- Added the week timetable grid: `myxb week` (also `myxb schedule week`) renders Monday-Sunday by period with today's column highlighted, free blocks, and rooms — no extra API calls.
+- Made the week grid the default view for `myxb schedule` (aliases: `s`, `cal`, `calendar`).
+- Added top-level shortcuts `myxb now`, `myxb next`, `myxb day`, and `myxb week` so common timetable queries no longer need the `schedule` group name.
+- Added `yesterday`/`昨天`, `next week`/`下周`, bare `next`, and `next <weekday>`/`下周五`-style day selectors.
+
+### Changes / Bug Fixes
+
+- Timetable commands now skip the login round trip when the week cache is fresh, making cached queries instant and quiet; login only happens on cache miss or `--refresh`.
+- Removed the hard profile requirement: timetable commands default to the `standard` profile (with a hint) instead of erroring out on first use.
+- Malformed schedule items from other days no longer break a day's view; items are filtered by date before time parsing.
+- The schedule cache file now prunes expired weeks on save instead of growing without bound.
+- Replaced `os.Exit` in the schedule auth path with returned errors, merged the duplicated now/next handlers, and load the config once per run.
+
+### Chores
+
+- Added schedule service, cache-pruning, week-view, lazy-login, and rendering regression tests.
+- Updated README and CLAUDE.md architecture notes for the timetable commands.
+
 ## v1.1.0 - 2026-05-04
 
 ### Features

@@ -18,6 +18,8 @@ go build -o myxb.exe ./cmd/myxb
 # Run the program
 ./myxb              # Calculate GPA using saved credentials
 ./myxb login        # Login and save credentials
+./myxb week         # Show this week's timetable grid
+./myxb now          # Show the class in session right now
 ./myxb help         # Show help message
 ```
 
@@ -29,6 +31,7 @@ go build -o myxb.exe ./cmd/myxb
   - `main.go` - Command routing (login, help, default GPA calculation)
   - `login.go` - Login flow and credential input handlers
   - `gpa.go` - GPA calculation command implementation
+  - `schedule.go` - Timetable commands (week/day/now/next views, profiles, rendering)
   - `colors.go` - Terminal color output utilities
 
 - `internal/` - Internal packages (not importable by external projects)
@@ -36,6 +39,7 @@ go build -o myxb.exe ./cmd/myxb
   - `auth/` - Password hashing (double MD5: MD5(password), then MD5(hash+timestamp))
   - `client/` - HTTP client with automatic cookie management
   - `config/` - Credential storage (~/.myxb/config.json)
+  - `schedule/` - Timetable service: week fetch/cache (~/.myxb/schedule_cache.json), day/week views, bell-schedule profiles
   - `models/` - Data structures for API requests/responses
 
 - `pkg/gpa/` - Public GPA calculation logic
@@ -43,6 +47,13 @@ go build -o myxb.exe ./cmd/myxb
   - `score_mapping.go` - Score to GPA conversion, course classification
   - `score_mapping.json` - Weighted (max 4.8) and non-weighted (max 4.3) GPA mappings (embedded)
   - `course_classification.json` - Lists of weighted/unweighted courses (embedded)
+
+### Timetable (Schedule) Flow
+
+1. `myxb week` / `now` / `next` / `day` (top-level shortcuts; the `schedule` group with aliases `s`/`cal`/`calendar` holds the same subcommands and defaults to the week grid)
+2. `cmd/myxb/schedule.go` builds the service with a lazy provider: login only runs when the week cache misses (30-minute TTL, account-scoped, expired weeks pruned on save)
+3. `internal/schedule.Service` fetches one Monday-Sunday week via `/api/Schedule/ListScheduleByParent`, builds `DayView`/`WeekView`, applies the bell-schedule profile (`highschool` overrides period 1-8 times; `standard` keeps API times and only pads free blocks)
+4. Profiles default to `standard` with a hint when unset; `myxb schedule profile <standard|highschool>` persists the choice in `~/.myxb/config.json`
 
 ### Key Data Flow
 
@@ -118,6 +129,7 @@ Critical endpoints (in order of typical usage):
 7. `/api/DynamicScore/GetDynamicScoreDetail` - Get evaluation projects and scores
 8. `/api/DynamicScore/GetStuSemesterDynamicScore` - Get official scores and IsInGrade flags
 9. `/api/DynamicScore/GetGpa` - Get official GPA for comparison
+10. `/api/Schedule/ListScheduleByParent` - Weekly timetable for schedule/calendar commands
 
 See `API_DOCUMENTATION.md` and `GPA_CALCULATION.md` for detailed specifications.
 

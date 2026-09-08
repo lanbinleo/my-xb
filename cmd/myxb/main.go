@@ -11,7 +11,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-var version = "1.1.0"
+var version = "1.2.0"
 
 func main() {
 	cmd := &cli.Command{
@@ -57,7 +57,7 @@ func main() {
 			runGPA(opts)
 			return nil
 		},
-		Commands: []*cli.Command{
+		Commands: append([]*cli.Command{
 			{
 				Name:    "login",
 				Aliases: []string{"l"},
@@ -86,7 +86,7 @@ func main() {
 				},
 			},
 			newScheduleCommand(),
-		},
+		}, newScheduleShortcutCommands()...),
 		Before: func(ctx context.Context, c *cli.Command) (context.Context, error) {
 			opts, err := parseGPACommandOptions(c)
 			if err != nil {
@@ -214,8 +214,8 @@ func runLogin() {
 
 	fmt.Println()
 	if _, ok := cfg.ConfiguredScheduleProfile(); !ok {
-		printWarning("Schedule profile not set yet")
-		printInfo("Run 'myxb schedule profile standard' or 'myxb schedule profile highschool' before using timetable commands")
+		printInfo("Timetable commands default to the Standard profile")
+		printInfo("Run 'myxb schedule profile highschool' to switch to the high-school bell schedule")
 		fmt.Println()
 	}
 	printInfo("You can now run 'myxb' to calculate your GPA")
