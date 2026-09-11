@@ -60,13 +60,13 @@ type jsonSubjectReport struct {
 	ID                uint64                  `json:"id"`
 	Name              string                  `json:"name"`
 	ASCIIName         string                  `json:"ascii_name"`
-	Score             float64                 `json:"score"`
+	Score             *float64                `json:"score"`
 	OfficialScore     *float64                `json:"official_score,omitempty"`
 	ExtraCredit       float64                 `json:"extra_credit,omitempty"`
-	GPA               float64                 `json:"gpa"`
-	UnweightedGPA     float64                 `json:"unweighted_gpa"`
-	MaxGPA            float64                 `json:"max_gpa"`
-	UnweightedMaxGPA  float64                 `json:"unweighted_max_gpa"`
+	GPA               *float64                `json:"gpa"`
+	UnweightedGPA     *float64                `json:"unweighted_gpa"`
+	MaxGPA            *float64                `json:"max_gpa"`
+	UnweightedMaxGPA  *float64                `json:"unweighted_max_gpa"`
 	Weight            float64                 `json:"weight"`
 	IsWeighted        bool                    `json:"is_weighted"`
 	IsElective        bool                    `json:"is_elective"`
@@ -176,10 +176,19 @@ func collectSingleSemesterReport(apiClient *api.API, semester models.Semester, o
 		fmt.Println()
 	}
 
+	degradeSubject := func(subject models.SubjectSimple, detail *models.SubjectDetail, action string, err error) {
+		calculated, warning := degradedSubjectReport(subject, detail, semesterScoreMap[subject.ID], fmt.Sprintf("%s: %v", action, err))
+		calculatedSubjects = append(calculatedSubjects, calculated)
+		warnings = append(warnings, warning)
+	}
+
 	for _, subject := range subjects {
+		dynamicInfo := semesterScoreMap[subject.ID]
+
 		tasks, err := apiClient.GetTaskList(semester.ID, subject.ID)
 		if err != nil {
-			return semesterReport{}, fmt.Errorf("failed to get tasks for subject %q (%d): %w", subject.Name, subject.ID, err)
+			degradeSubject(subject, nil, "failed to get tasks", err)
+			continue
 		}
 		if len(tasks) == 0 {
 			warnings = append(warnings, fmt.Sprintf("Skipped %s: no learning tasks returned", subject.Name))
@@ -189,16 +198,17 @@ func collectSingleSemesterReport(apiClient *api.API, semester models.Semester, o
 		taskDetails := make(map[uint64]*models.SubjectDetail)
 		detail, _, err := taskCache.detailFor(apiClient, tasks[0])
 		if err != nil {
-			return semesterReport{}, fmt.Errorf("failed to get task detail for subject %q (%d), task %d: %w", subject.Name, subject.ID, tasks[0].ID, err)
+			degradeSubject(subject, nil, fmt.Sprintf("failed to get task detail for task %d", tasks[0].ID), err)
+			continue
 		}
 		taskDetails[tasks[0].ID] = detail
 
 		dynamicScore, err := apiClient.GetDynamicScoreDetail(detail.ClassID, subject.ID, semester.ID)
 		if err != nil {
-			return semesterReport{}, fmt.Errorf("failed to get score detail for subject %q (%d): %w", subject.Name, subject.ID, err)
+			degradeSubject(subject, detail, "failed to get score detail", err)
+			continue
 		}
 
-		dynamicInfo := semesterScoreMap[subject.ID]
 		isElective := strings.Contains(subject.Name, ElectiveCourseKeyword)
 		calculatedSubject := gpa.ProcessSubject(detail, dynamicScore, dynamicInfo, isElective)
 		calculatedSubjects = append(calculatedSubjects, calculatedSubject)
@@ -207,7 +217,8 @@ func collectSingleSemesterReport(apiClient *api.API, semester models.Semester, o
 			for _, task := range tasks[1:] {
 				taskDetail, _, err := taskCache.detailFor(apiClient, task)
 				if err != nil {
-					return semesterReport{}, fmt.Errorf("failed to get task detail for subject %q (%d), task %d: %w", subject.Name, subject.ID, task.ID, err)
+					warnings = append(warnings, fmt.Sprintf("Could not load all task details for %s: %v", subject.Name, err))
+					break
 				}
 				taskDetails[task.ID] = taskDetail
 			}
@@ -234,6 +245,36 @@ func collectSingleSemesterReport(apiClient *api.API, semester models.Semester, o
 		Warnings:       warnings,
 		TaskCacheStats: taskCache.stats(),
 	}, nil
+}
+
+// degradedSubjectReport builds an official-score-only fallback for a subject
+// whose score details cannot be fetched (for example when a course's scores
+// have not been synced to the mobile API). ProcessSubject prefers the official
+// semester score over the evaluation-project breakdown, so an empty
+// DynamicScoreData keeps the GPA contribution identical to a full fetch; the
+// subject only loses its per-category details. Without an official score the
+// returned subject keeps a NaN score and is excluded from GPA calculation.
+func degradedSubjectReport(subject models.SubjectSimple, detail *models.SubjectDetail, dynamicInfo *models.SubjectDynamicScore, reason string) (gpa.Subject, string) {
+	if detail == nil {
+		var classID uint64
+		if dynamicInfo != nil {
+			classID = dynamicInfo.ClassID
+		}
+		detail = &models.SubjectDetail{
+			SubjectID:   subject.ID,
+			SubjectName: subject.Name,
+			ClassID:     classID,
+		}
+	}
+
+	isElective := strings.Contains(subject.Name, ElectiveCourseKeyword)
+	calculated := gpa.ProcessSubject(detail, &models.DynamicScoreData{}, dynamicInfo, isElective)
+
+	warning := fmt.Sprintf("Skipped %s: %s", subject.Name, reason)
+	if dynamicInfo != nil && dynamicInfo.SubjectScore != nil && dynamicInfo.SubjectTotalScore > 0 {
+		warning = fmt.Sprintf("Used official score only for %s: %s", subject.Name, reason)
+	}
+	return calculated, warning
 }
 
 func resolveSemesterSelection(semesters []models.Semester, opts gpaCommandOptions) ([]models.Semester, error) {
@@ -754,13 +795,13 @@ func renderJSONReports(reports []semesterReport, opts gpaCommandOptions) (string
 				ID:                subject.ID,
 				Name:              subject.Name,
 				ASCIIName:         asciiDisplayText(subject.Name),
-				Score:             subject.Score,
+				Score:             nullableJSONFloat(subject.Score),
 				OfficialScore:     subject.OfficialScore,
 				ExtraCredit:       subject.ExtraCredit,
-				GPA:               subject.GPA,
-				UnweightedGPA:     subject.UnweightedGPA,
-				MaxGPA:            subject.MaxGPA,
-				UnweightedMaxGPA:  subject.UnweightedMaxGPA,
+				GPA:               nullableJSONFloat(subject.GPA),
+				UnweightedGPA:     nullableJSONFloat(subject.UnweightedGPA),
+				MaxGPA:            nullableJSONFloat(subject.MaxGPA),
+				UnweightedMaxGPA:  nullableJSONFloat(subject.UnweightedMaxGPA),
 				Weight:            subject.Weight,
 				IsWeighted:        subject.IsWeighted,
 				IsElective:        subject.IsElective,

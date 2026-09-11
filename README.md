@@ -164,6 +164,8 @@ myxb/
 6. Applies course credit weights (regular: 1.0, electives such as Spanish: 0.5, plus configured fractional-credit courses)
 7. Computes weighted average GPA
 
+If a subject's score details cannot be fetched (for example when a course's scores have not been synced to the mobile API), that subject falls back to its official semester score with a warning instead of aborting the whole report. Subjects without an official score are skipped and excluded from the GPA calculation.
+
 See `GPA_CALCULATION.md` for detailed methodology.
 
 ### Weighted Courses

@@ -215,3 +215,86 @@ func TestRenderSubjectTableKeepsUncategorizedTasks(t *testing.T) {
 		t.Fatalf("renderSubjectTable output = %s, want uncategorized tasks preserved", rendered)
 	}
 }
+
+func TestDegradedSubjectReportUsesOfficialScore(t *testing.T) {
+	officialScore := 85.0
+	subject := models.SubjectSimple{ID: 129797, Name: "AP English Literature and Composition"}
+	dynamicInfo := &models.SubjectDynamicScore{
+		ClassID:           555,
+		SubjectID:         subject.ID,
+		IsInGrade:         true,
+		SubjectScore:      &officialScore,
+		SubjectTotalScore: 100,
+	}
+
+	calculated, warning := degradedSubjectReport(subject, nil, dynamicInfo, "failed to get score detail")
+
+	if calculated.ID != subject.ID || calculated.Name != subject.Name || calculated.ClassID != 555 {
+		t.Fatalf("degradedSubjectReport built subject %+v, want ID/Name/ClassID from subject and dynamicInfo", calculated)
+	}
+	if calculated.OfficialScore == nil || *calculated.OfficialScore != 85.0 {
+		t.Fatalf("degradedSubjectReport OfficialScore = %v, want 85", calculated.OfficialScore)
+	}
+	if calculated.Score != 85.0 {
+		t.Fatalf("degradedSubjectReport Score = %v, want official score 85", calculated.Score)
+	}
+	if !strings.Contains(warning, "Used official score only for "+subject.Name) {
+		t.Fatalf("degradedSubjectReport warning = %q, want official-score-only wording", warning)
+	}
+	if !strings.Contains(warning, "failed to get score detail") {
+		t.Fatalf("degradedSubjectReport warning = %q, want reason preserved", warning)
+	}
+}
+
+func TestDegradedSubjectReportWithoutOfficialScore(t *testing.T) {
+	subject := models.SubjectSimple{ID: 7, Name: "Test Subject"}
+
+	for _, dynamicInfo := range []*models.SubjectDynamicScore{
+		nil,
+		{SubjectID: 7, IsInGrade: true},
+	} {
+		calculated, warning := degradedSubjectReport(subject, nil, dynamicInfo, "failed to get tasks")
+
+		if !math.IsNaN(calculated.Score) {
+			t.Fatalf("degradedSubjectReport Score = %v, want NaN without official score", calculated.Score)
+		}
+		if !strings.Contains(warning, "Skipped "+subject.Name+": failed to get tasks") {
+			t.Fatalf("degradedSubjectReport warning = %q, want skip wording with reason", warning)
+		}
+	}
+}
+
+func TestRenderJSONReportsAllowsNaNSubjectValues(t *testing.T) {
+	reports := []semesterReport{
+		{
+			Semester: models.Semester{ID: 1, Year: 2025, Semester: 1},
+			Result: gpa.CalculatedGPA{
+				WeightedGPA:      3.5,
+				MaxGPA:           4.8,
+				UnweightedGPA:    3.4,
+				UnweightedMaxGPA: 4.3,
+			},
+			Subjects: []gpa.Subject{
+				{
+					ID:                1,
+					Name:              "No Score Subject",
+					Score:             math.NaN(),
+					GPA:               math.NaN(),
+					UnweightedGPA:     math.NaN(),
+					MaxGPA:            4.8,
+					UnweightedMaxGPA:  4.3,
+					Weight:            1.0,
+					EvaluationDetails: []models.EvaluationProject{},
+				},
+			},
+		},
+	}
+
+	rendered, err := renderJSONReports(reports, gpaCommandOptions{Format: formatJSON})
+	if err != nil {
+		t.Fatalf("renderJSONReports returned error: %v", err)
+	}
+	if !strings.Contains(rendered, `"score": null`) || !strings.Contains(rendered, `"gpa": null`) {
+		t.Fatalf("renderJSONReports output missing null score/gpa:\n%s", rendered)
+	}
+}
