@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.2.1 - 2026-09-11
+
+### Changes / Bug Fixes
+
+- A subject whose score-detail fetch fails (for example when Xiaobao reports the course's scores have not been synced to the mobile API) no longer aborts the whole GPA report. The subject falls back to its official semester score with a warning; subjects without an official score are excluded from GPA calculation. Batch endpoints (subject list, semester-wide scores) remain fatal.
+- Degraded runs still match the official GPA when score details are unavailable, because the official semester score was already preferred for final subject scores.
+- Subject-level NaN scores now serialize as `null` in JSON output instead of failing JSON encoding.
+
+### Chores
+
+- Added regression tests for the official-score-only fallback and NaN-safe JSON output.
+- Documented the degradation behavior in README and GPA_CALCULATION.md.
+
 ## v1.2.0 - 2026-09-08
 
 ### Features
