@@ -117,11 +117,12 @@ Export path behavior:
 - `myxb next` - Show the next class for today
 - `myxb day friday` - Show the timetable for a weekday in the current week
 - `myxb day 2026-04-03` - Show the timetable for a specific date
+- `myxb ics` - Export this week's timetable to an .ics calendar file (regular classes only; add `--all` for everything)
 - `myxb attendance` - Show your attendance rate for the current school year
 - `myxb schedule profile highschool` - Save the high-school bell schedule profile
 - `myxb help` - Show help message
 
-`myxb schedule` (aliases: `myxb s`, `myxb cal`, `myxb calendar`) groups the same views: `now`, `next`, `day`, `week`, and `profile`.
+`myxb schedule` (aliases: `myxb s`, `myxb cal`, `myxb calendar`) groups the same views: `now`, `next`, `day`, `week`, `ics`, and `profile`.
 
 ## Project Structure
 
@@ -212,10 +213,16 @@ Useful commands:
 ./myxb schedule -d 周四      # same views via the schedule group
 ./myxb week --refresh
 ./myxb schedule profile highschool
+./myxb ics                   # export this week as .ics (regular classes)
+./myxb ics next --all        # next week, including clubs and events
+./myxb ics -o ~/Desktop      # export into a directory
 ```
 
 Notes:
 
+- `myxb ics` (also `myxb schedule ics`) writes `myxb_schedule_<begin>_<end>.ics` to the Desktop by default; `--output/-o` accepts a file or directory path
+- ICS exports default to regular classes only (formal blocks 1-8); pass `--all` to also include clubs, events, and off-grid items such as drama
+- ICS event times follow your saved profile (highschool bell schedule or Xiaobao's raw times) and use deterministic UIDs, so re-importing an updated week refreshes the same events instead of duplicating them
 - `myxb schedule` (aliases `s`, `cal`, `calendar`) defaults to the week grid; `myxb day` shows one day's full table with `NOW` / `NEXT` markers and untruncated course names
 - Week-grid cells show the course (and room); long names are truncated to keep the grid readable — use `myxb day <selector>` for full names
 - Selectors accept `YYYY-MM-DD`, English weekdays, Chinese weekdays, `today`, `tomorrow`, `yesterday`, `next <weekday>`, `下周一`-style next-week names, and `next week` / `下周`

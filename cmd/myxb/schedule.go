@@ -77,6 +77,7 @@ func newScheduleCommand() *cli.Command {
 					return runScheduleWeekCommand(c, scheduleSelectorArg(c))
 				},
 			},
+			newScheduleICSCommand(),
 			{
 				Name:      "profile",
 				Aliases:   []string{"p"},
@@ -121,13 +122,14 @@ func newScheduleShortcutCommands() []*cli.Command {
 		},
 		{
 			Name:      "week",
-			Usage:     "Show the timetable for a whole week (shortcut for 'schedule week')",
+			Usage:     "Show the timetable for a date or weekday (shortcut for 'schedule week')",
 			ArgsUsage: "[date-or-weekday]",
 			Flags:     scheduleDayFlags(),
 			Action: func(ctx context.Context, c *cli.Command) error {
 				return runScheduleWeekCommand(c, scheduleSelectorArg(c))
 			},
 		},
+		newScheduleICSShortcutCommand(),
 	}
 }
 
