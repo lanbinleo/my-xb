@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.2.2 - 2026-09-15
+
+### Features
+
+- New `myxb ics [date-or-weekday]` command (also `myxb schedule ics`) exports a full Monday-Sunday week of the timetable as an `.ics` calendar file, ready to import into Apple Calendar, Google Calendar, or Outlook.
+- Exports respect the saved schedule profile: the highschool profile applies the fixed bell-schedule times while standard keeps the times reported by Xiaobao.
+- By default only regular classes (formal blocks 1-8) are exported; clubs, events, and off-grid items such as drama are excluded. Pass `--all` to include them.
+- Files default to `myxb_schedule_<begin>_<end>.ics` on the Desktop; override with `--output/-o` (file or directory). Event UIDs are deterministic, so re-importing an updated week refreshes the same events instead of duplicating them.
+
+### Chores
+
+- Added an internal RFC 5545 writer package with tests covering text escaping, UTF-8-safe line folding, and UTC timestamp formatting.
+
 ## v1.2.1 - 2026-09-11
 
 ### Changes / Bug Fixes
