@@ -156,20 +156,22 @@ type TaskData struct {
 }
 
 type TaskItem struct {
-    ID          uint64   `json:"id"`          // 学习任务ID，用于获取详情
-    Name        string   `json:"name"`        // 任务名称
-    Score       *float64 `json:"score"`       // 得分，可能为null
-    TotalScore  float64  `json:"totalScore"`  // 满分
-    FinishState uint8    `json:"finishState"` // 完成/出分状态
-    TypeName    string   `json:"typeName"`    // 任务类型中文名
-    TypeEName   string   `json:"typeEName"`   // 任务类型英文名
-    SyncTime    string   `json:"syncTime"`    // 同步时间，可用于缓存失效判断
+    ID                 uint64   `json:"id"`                 // 学习任务ID，用于获取详情
+    Name               string   `json:"name"`               // 任务名称
+    Score              *float64 `json:"score"`              // 得分，可能为null
+    TotalScore         float64  `json:"totalScore"`         // 满分
+    FinishState        uint8    `json:"finishState"`        // 完成/出分状态
+    TypeName           string   `json:"typeName"`           // 任务类型中文名
+    TypeEName          string   `json:"typeEName"`          // 任务类型英文名
+    SyncTime           string   `json:"syncTime"`           // 同步时间，可用于缓存失效判断
+    IsSynchroToMobiled uint8    `json:"isSynchroToMobiled"` // 成绩是否已同步到移动端（见说明）
 }
 ```
 
 **说明**:
 - 这个API主要用于获取`taskId`，用于下一步获取科目详细信息
 - 通常只需要获取第一个任务即可
+- **`isSynchroToMobiled=0` 的任务即使返回 `score=0` 也不代表真实成绩**：未同步到移动端的任务统一返回 `score=0`（`syncTime` 为 `0001-01-01`），即便任务实际上尚未出分。判断任务是否真正出分必须同时要求 `isSynchroToMobiled=1`，否则未出分的任务会被误判为 0 分。GPA 的任务级回退估算（见第 7 节说明）依赖此字段过滤未出分任务。
 
 ---
 
@@ -260,6 +262,7 @@ type LearningTask struct {
 - 需要根据`ScoreIsNull`过滤掉没有成绩的项目
 - 比例需要重新计算（见GPA计算文档）
 - 当前实测中，`learningTaskAndExamList`可能为空；若要把每个assignment归入category，需要结合`LearningTask/GetDetail`中的`evaProjects`
+- **课程成绩未同步到移动端时本接口直接报错**（`state != 0`，`msg` 为「该课程成绩未同步到移动端，无法查看成绩详情。请联系管理员。」）。网页端 SPA 调用的是同一接口、同样参数，无法绕过。学期初这可能是全校性的（实测 2026-2027 S1 全部科目均报此错）。此时任务级数据（`LearningTask/GetList` 的分数 + `GetDetail` 的 `evaProjects` 分类路径）仍然完整可用，myxb 会在本地按分类聚合任务分数重建评分项目树进行估算（`pkg/gpa.BuildEvaluationFromTasks`），估算规则与实测的服务端行为一致：叶子分类分 = 已同步成员任务百分比分的简单平均，父分类分 = 子分类占比加权平均，子分类占比相对父分类（如 Continuous Assessments 40% 内 Homework 33% + Classroom-Based Assessments 67%）。
 
 ---
 

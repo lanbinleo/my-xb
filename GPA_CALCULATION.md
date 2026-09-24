@@ -349,7 +349,7 @@ func calculateGPA(subjects []Subject) CalculatedGPA {
 1. 获取学期的所有科目
    ↓
 2. 对每个科目:
-   a. 获取评分项目列表
+   a. 获取评分项目列表（接口失败时改用任务级回退估算，见下节）
    b. 调整评分项目比例（排除无成绩项目）
    c. 计算科目总分
    d. 判断使用Weighted还是Non-Weighted映射表
@@ -365,6 +365,35 @@ func calculateGPA(subjects []Subject) CalculatedGPA {
    ↓
 7. 输出结果，与官方GPA对比
 ```
+
+---
+
+## 任务级回退估算（Task Score Fallback）
+
+### 触发条件
+
+`DynamicScore/GetDynamicScoreDetail` 对某科目返回错误（典型为「该课程成绩未同步到移动端，无法查看成绩详情」）时，不再直接跳过该科目，而是用任务级数据在本地重建评分项目树：
+
+- 分数来源：`LearningTask/GetList` 中每个任务的 `score`/`totalScore`
+- 分类来源：`LearningTask/GetDetail` 中每个任务的 `evaProjects` 分类路径（含各级占比）
+
+### 估算规则
+
+实测服务端的聚合行为（与 `attachTaskDetailMetadata` 的校验逻辑一致，容差 0.25）：
+
+1. **只有 `isSynchroToMobiled=1` 的任务才算已出分**。未同步的任务即使返回 `score=0` 也不代表真实成绩（`syncTime` 为 `0001-01-01`），必须排除；`isInSubjectScore=false` 的任务同样排除。
+2. **叶子分类分 = 已同步成员任务百分比分（score/totalScore×100）的简单平均**。
+3. **父分类分 = 子分类占比的加权平均**，占比来自任务详情的分类路径，且**子分类占比相对父分类**。以 2026-2027 学年评分结构为例：
+   - Continuous Assessments 连续性评估 40%（内含 Homework 作业 33% + Classroom-Based Assessments 课堂任务 67%）
+   - Comprehensive Assessments 综合性评估 40%
+   - 期末考试 20%
+4. 重建后的树照常走 `AdjustProportions`（无成绩分类间归一化）与 `CalculateSubjectScore`，与真实数据路径完全一致。例如学期初只有 Continuous 下出了分时，当前科目分即按 Continuous 单独 100% 计算。
+5. 若没有任何已同步出分的任务，则维持降级行为（有官方分用官方分，否则跳过该科目）。
+
+### 局限
+
+- 无法复现服务端的特殊调整（如去掉最低分、教师在分类层面的手动调分），因此属于估算；输出中会将估算科目汇总为一行安静的提示（`Estimated N subjects from task-level scores (course score details unavailable): ...`），不再按科目逐条弹 Warning。
+- 仅在已出现任务的分类范围内重建；完全没有任务挂靠的分类（如尚未开考的期末考试）不会出现在估算树中。
 
 ---
 

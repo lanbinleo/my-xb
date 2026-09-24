@@ -165,7 +165,7 @@ myxb/
 6. Applies course credit weights (regular: 1.0, electives such as Spanish: 0.5, plus configured fractional-credit courses)
 7. Computes weighted average GPA
 
-If a subject's score details cannot be fetched (for example when a course's scores have not been synced to the mobile API), that subject falls back to its official semester score with a warning instead of aborting the whole report. Subjects without an official score are skipped and excluded from the GPA calculation.
+If a subject's score details cannot be fetched (for example when a course's scores have not been synced to the mobile API), myxb rebuilds the subject's category breakdown from task-level scores and category paths and continues the calculation; estimated subjects are summarized in one calm info line (`Estimated N subjects from task-level scores ...`) instead of per-subject warnings. Only when no graded task exists at all does the subject fall back to its official semester score (or get skipped, with a warning, if there is none). Tasks whose scores have not been synced yet report `score=0` from the API; they are recognized via `isSynchroToMobiled` and shown as pending rather than as a graded zero.
 
 See `GPA_CALCULATION.md` for detailed methodology.
 
