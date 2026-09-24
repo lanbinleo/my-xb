@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.2.3 - 2026-09-24
+
+### Changes / Bug Fixes
+
+- Subjects rejected by the score-detail API with 「该课程成绩未同步到移动端，无法查看成绩详情」 are no longer skipped: myxb now rebuilds the subject's category tree from task-level scores (`LearningTask/GetList`) and category paths (`GetDetail`/`evaProjects`) and calculates an estimated score locally. Estimated subjects are summarized in a single calm info line (`Estimated N subjects from task-level scores ...`) instead of per-subject warnings; the official-score-only fallback now applies only when no graded task exists at all.
+- Tasks whose scores have not been synced to the mobile API return `score=0` even before grading; they are now detected via `isSynchroToMobiled` and rendered as pending (`未出分`) instead of a graded 0, and are excluded from estimated category averages.
+
+### Chores
+
+- Added `pkg/gpa.BuildEvaluationFromTasks` with unit tests covering nested category proportions (e.g. Homework 33% + Classroom-Based Assessments 67% inside Continuous Assessments 40%), unsynced-task exclusion, and empty-tree NaN behavior.
+- JSON export now reports estimated subjects under `summary.estimated_from_tasks`.
+- Documented the mobile-sync error, the `isSynchroToMobiled` field, and the fallback estimation rules in `API_DOCUMENTATION.md`, `GPA_CALCULATION.md`, and `README.md`.
+
 ## v1.2.2 - 2026-09-15
 
 ### Features
