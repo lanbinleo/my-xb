@@ -82,6 +82,10 @@ type TaskItem struct {
 	ScoreType              uint8    `json:"scoreType"`
 	LevelString            string   `json:"levelString"`
 	IsExempt               bool     `json:"isExempt"`
+	// IsSynchroToMobiled marks whether the task's score has been synced to the
+	// mobile API. Unsynced tasks report score=0 even when not yet graded, so a
+	// zero score must not be treated as a real grade.
+	IsSynchroToMobiled     uint8    `json:"isSynchroToMobiled"`
 	CategoryID             uint64   `json:"category_id,omitempty"`
 	CategoryName           string   `json:"category_name,omitempty"`
 	CategoryEName          string   `json:"category_ename,omitempty"`

@@ -296,8 +296,11 @@ func taskLeafEvaluationProject(detail *models.SubjectDetail) *models.TaskEvaluat
 	return &detail.EvaProjects[len(detail.EvaProjects)-1]
 }
 
+// taskHasScore reports whether a task exposes a real grade. Tasks whose
+// scores have not been synced to the mobile API report score=0 even before
+// grading, so those must render as pending.
 func taskHasScore(task models.TaskItem) bool {
-	return task.FinishState != 0 && task.Score != nil
+	return task.FinishState != 0 && task.Score != nil && task.IsSynchroToMobiled == 1
 }
 
 func taskCategoryDisplay(task models.TaskItem) string {

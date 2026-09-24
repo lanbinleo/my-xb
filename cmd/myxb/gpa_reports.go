@@ -14,14 +14,15 @@ import (
 )
 
 type semesterReport struct {
-	Semester       models.Semester
-	Subjects       []gpa.Subject
-	TasksBySubject map[uint64][]models.TaskItem
-	Result         gpa.CalculatedGPA
-	OfficialGPA    *float64
-	OfficialGPAErr error
-	Warnings       []string
-	TaskCacheStats taskDetailCacheStats
+	Semester          models.Semester
+	Subjects          []gpa.Subject
+	TasksBySubject    map[uint64][]models.TaskItem
+	Result            gpa.CalculatedGPA
+	OfficialGPA       *float64
+	OfficialGPAErr    error
+	Warnings          []string
+	EstimatedSubjects []string
+	TaskCacheStats    taskDetailCacheStats
 }
 
 type jsonOutput struct {
@@ -45,15 +46,16 @@ type jsonSemesterMeta struct {
 }
 
 type jsonSummary struct {
-	WeightedGPA      *float64 `json:"weighted_gpa"`
-	MaxGPA           *float64 `json:"max_gpa"`
-	UnweightedGPA    *float64 `json:"unweighted_gpa"`
-	UnweightedMaxGPA *float64 `json:"unweighted_max_gpa"`
-	OfficialGPA      *float64 `json:"official_gpa,omitempty"`
-	OfficialGPAError string   `json:"official_gpa_error,omitempty"`
-	OfficialDiff     *float64 `json:"official_diff,omitempty"`
-	SubjectCount     int      `json:"subject_count"`
-	Warnings         []string `json:"warnings,omitempty"`
+	WeightedGPA       *float64 `json:"weighted_gpa"`
+	MaxGPA            *float64 `json:"max_gpa"`
+	UnweightedGPA     *float64 `json:"unweighted_gpa"`
+	UnweightedMaxGPA  *float64 `json:"unweighted_max_gpa"`
+	OfficialGPA       *float64 `json:"official_gpa,omitempty"`
+	OfficialGPAError  string   `json:"official_gpa_error,omitempty"`
+	OfficialDiff      *float64 `json:"official_diff,omitempty"`
+	SubjectCount      int      `json:"subject_count"`
+	EstimatedSubjects []string `json:"estimated_from_tasks,omitempty"`
+	Warnings          []string `json:"warnings,omitempty"`
 }
 
 type jsonSubjectReport struct {
@@ -166,6 +168,7 @@ func collectSingleSemesterReport(apiClient *api.API, semester models.Semester, o
 	calculatedSubjects := []gpa.Subject{}
 	subjectTasksMap := make(map[uint64][]models.TaskItem)
 	warnings := []string{}
+	estimatedSubjects := []string{}
 	taskCache, err := loadTaskDetailCache(opts.RefreshTaskCache)
 	if err != nil {
 		return semesterReport{}, fmt.Errorf("failed to load task detail cache: %w", err)
@@ -205,8 +208,17 @@ func collectSingleSemesterReport(apiClient *api.API, semester models.Semester, o
 
 		dynamicScore, err := apiClient.GetDynamicScoreDetail(detail.ClassID, subject.ID, semester.ID)
 		if err != nil {
-			degradeSubject(subject, detail, "failed to get score detail", err)
-			continue
+			// The score-detail endpoint can reject courses whose aggregated
+			// scores were never synced to the mobile API. Task-level scores
+			// and category paths are still available, so rebuild the
+			// evaluation tree from them instead of skipping the subject.
+			fallback, fallbackErr := estimateDynamicScoreFromTasks(apiClient, taskCache, subject, tasks, taskDetails, &warnings)
+			if fallbackErr != nil {
+				degradeSubject(subject, detail, "failed to get score detail", err)
+				continue
+			}
+			dynamicScore = fallback
+			estimatedSubjects = append(estimatedSubjects, subject.Name)
 		}
 
 		isElective := strings.Contains(subject.Name, ElectiveCourseKeyword)
@@ -236,14 +248,15 @@ func collectSingleSemesterReport(apiClient *api.API, semester models.Semester, o
 	officialGPA, officialGPAErr := apiClient.GetGPA(semester.ID)
 
 	return semesterReport{
-		Semester:       semester,
-		Subjects:       calculatedSubjects,
-		TasksBySubject: subjectTasksMap,
-		Result:         result,
-		OfficialGPA:    officialGPA,
-		OfficialGPAErr: officialGPAErr,
-		Warnings:       warnings,
-		TaskCacheStats: taskCache.stats(),
+		Semester:          semester,
+		Subjects:          calculatedSubjects,
+		TasksBySubject:    subjectTasksMap,
+		Result:            result,
+		OfficialGPA:       officialGPA,
+		OfficialGPAErr:    officialGPAErr,
+		Warnings:          warnings,
+		EstimatedSubjects: estimatedSubjects,
+		TaskCacheStats:    taskCache.stats(),
 	}, nil
 }
 
@@ -275,6 +288,32 @@ func degradedSubjectReport(subject models.SubjectSimple, detail *models.SubjectD
 		warning = fmt.Sprintf("Used official score only for %s: %s", subject.Name, reason)
 	}
 	return calculated, warning
+}
+
+// estimateDynamicScoreFromTasks rebuilds a subject's evaluation-project tree
+// from task-level data when the score-detail API rejects the course (for
+// example "该课程成绩未同步到移动端，无法查看成绩详情"). It loads the missing task
+// details through the cache, aggregates synced task scores per category, and
+// returns an error only when no scored task is left to build from.
+func estimateDynamicScoreFromTasks(apiClient *api.API, taskCache *taskDetailCache, subject models.SubjectSimple, tasks []models.TaskItem, taskDetails map[uint64]*models.SubjectDetail, warnings *[]string) (*models.DynamicScoreData, error) {
+	for _, task := range tasks {
+		if _, ok := taskDetails[task.ID]; ok {
+			continue
+		}
+		taskDetail, _, err := taskCache.detailFor(apiClient, task)
+		if err != nil {
+			*warnings = append(*warnings, fmt.Sprintf("Could not load all task details for %s: %v", subject.Name, err))
+			continue
+		}
+		taskDetails[task.ID] = taskDetail
+	}
+
+	projects := gpa.BuildEvaluationFromTasks(tasks, taskDetails, gpa.IsWeightedSubject(subject.Name))
+	if math.IsNaN(gpa.CalculateSubjectScore(projects)) {
+		return nil, fmt.Errorf("no synced task scores available")
+	}
+
+	return &models.DynamicScoreData{EvaluationProjectList: projects}, nil
 }
 
 func resolveSemesterSelection(semesters []models.Semester, opts gpaCommandOptions) ([]models.Semester, error) {
@@ -522,6 +561,12 @@ func renderHumanSummary(report semesterReport, opts gpaCommandOptions) string {
 		report.Result.UnweightedMaxGPA,
 		gray(fmt.Sprintf("(%.1f%%)", report.Result.UnweightedGPA/report.Result.UnweightedMaxGPA*100))))
 
+	if notice := renderEstimateNotice(report.EstimatedSubjects, true); notice != "" {
+		out.WriteString("\n")
+		out.WriteString(notice)
+		out.WriteString("\n")
+	}
+
 	if warningText := renderWarnings(report.Warnings, true); warningText != "" {
 		out.WriteString("\n")
 		out.WriteString(warningText)
@@ -603,6 +648,10 @@ func renderTableReports(reports []semesterReport, opts gpaCommandOptions) string
 			out.WriteString(" | official unavailable")
 		}
 		out.WriteString("\n")
+		if notice := renderEstimateNotice(report.EstimatedSubjects, false); notice != "" {
+			out.WriteString(notice)
+			out.WriteString("\n")
+		}
 		if warningText := renderWarnings(report.Warnings, false); warningText != "" {
 			out.WriteString(warningText)
 			out.WriteString("\n")
@@ -681,6 +730,10 @@ func renderPlainReports(reports []semesterReport, opts gpaCommandOptions) string
 				out.WriteString(fmt.Sprintf("Official GPA unavailable: %v\n", report.OfficialGPAErr))
 			}
 			out.WriteString(fmt.Sprintf("Subjects: %d\n", len(report.Result.Subjects)))
+			if notice := renderEstimateNotice(report.EstimatedSubjects, false); notice != "" {
+				out.WriteString(notice)
+				out.WriteString("\n")
+			}
 			if warningText := renderWarnings(report.Warnings, false); warningText != "" {
 				out.WriteString(warningText)
 			}
@@ -733,6 +786,9 @@ func renderMarkdownReports(reports []semesterReport, opts gpaCommandOptions) str
 				out.WriteString(fmt.Sprintf("- Official GPA unavailable: %v\n", report.OfficialGPAErr))
 			}
 			out.WriteString(fmt.Sprintf("- Subjects: %d\n", len(report.Result.Subjects)))
+			if notice := renderEstimateNotice(report.EstimatedSubjects, false); notice != "" {
+				out.WriteString("- " + strings.TrimPrefix(notice, "Note: ") + "\n")
+			}
 			for _, warning := range report.Warnings {
 				out.WriteString("- Warning: " + asciiDisplayText(warning) + "\n")
 			}
@@ -775,14 +831,15 @@ func renderJSONReports(reports []semesterReport, opts gpaCommandOptions) (string
 
 	for _, report := range reports {
 		summary := jsonSummary{
-			WeightedGPA:      nullableJSONFloat(report.Result.WeightedGPA),
-			MaxGPA:           nullableJSONFloat(report.Result.MaxGPA),
-			UnweightedGPA:    nullableJSONFloat(report.Result.UnweightedGPA),
-			UnweightedMaxGPA: nullableJSONFloat(report.Result.UnweightedMaxGPA),
-			OfficialGPA:      report.OfficialGPA,
-			OfficialGPAError: errorString(report.OfficialGPAErr),
-			SubjectCount:     len(report.Result.Subjects),
-			Warnings:         report.Warnings,
+			WeightedGPA:       nullableJSONFloat(report.Result.WeightedGPA),
+			MaxGPA:            nullableJSONFloat(report.Result.MaxGPA),
+			UnweightedGPA:     nullableJSONFloat(report.Result.UnweightedGPA),
+			UnweightedMaxGPA:  nullableJSONFloat(report.Result.UnweightedMaxGPA),
+			OfficialGPA:       report.OfficialGPA,
+			OfficialGPAError:  errorString(report.OfficialGPAErr),
+			SubjectCount:      len(report.Result.Subjects),
+			EstimatedSubjects: report.EstimatedSubjects,
+			Warnings:          report.Warnings,
 		}
 		if report.OfficialGPA != nil && !math.IsNaN(report.Result.WeightedGPA) {
 			diff := report.Result.WeightedGPA - *report.OfficialGPA
@@ -874,21 +931,21 @@ func subjectTypeCode(subject gpa.Subject) string {
 }
 
 func taskScoreDisplay(task models.TaskItem) string {
-	if task.FinishState != 0 && task.Score != nil {
+	if taskHasScore(task) {
 		return fmt.Sprintf("%.0f/%.0f", *task.Score, task.TotalScore)
 	}
 	return fmt.Sprintf("-/%.0f", task.TotalScore)
 }
 
 func taskScoreDisplaySpaced(task models.TaskItem) string {
-	if task.FinishState != 0 && task.Score != nil {
+	if taskHasScore(task) {
 		return fmt.Sprintf("%.0f / %.0f", *task.Score, task.TotalScore)
 	}
 	return fmt.Sprintf("- / %.0f", task.TotalScore)
 }
 
 func taskPctDisplay(task models.TaskItem) string {
-	if task.FinishState != 0 && task.Score != nil && task.TotalScore > 0 {
+	if taskHasScore(task) {
 		return fmt.Sprintf("%.1f", *task.Score/task.TotalScore*100.0)
 	}
 	return "-"
@@ -902,7 +959,7 @@ func taskPctDisplayForTable(task models.TaskItem) string {
 }
 
 func taskStatusCode(task models.TaskItem) string {
-	if task.FinishState != 0 && task.Score != nil {
+	if taskHasScore(task) {
 		return "graded"
 	}
 	return "pending"
@@ -959,6 +1016,34 @@ func renderWarnings(warnings []string, colorized bool) string {
 		out.WriteString("\n")
 	}
 	return out.String()
+}
+
+// renderEstimateNotice summarizes subjects scored through the task-level
+// fallback as a single calm info line. A successful estimate is not a warning:
+// the subject still participates in GPA calculation, so the notice only
+// explains why its category breakdown is a local reconstruction.
+func renderEstimateNotice(subjects []string, colorized bool) string {
+	if len(subjects) == 0 {
+		return ""
+	}
+
+	names := make([]string, 0, len(subjects))
+	for _, name := range subjects {
+		names = append(names, asciiDisplayText(name))
+	}
+
+	var text string
+	if len(names) == 1 {
+		text = fmt.Sprintf("Estimated %s from task-level scores (course score details unavailable)", names[0])
+	} else {
+		text = fmt.Sprintf("Estimated %d subjects from task-level scores (course score details unavailable): %s",
+			len(names), strings.Join(names, ", "))
+	}
+
+	if colorized {
+		return blue("i") + " " + gray(text)
+	}
+	return "Note: " + text
 }
 
 func renderTaskCacheNotice(stats taskDetailCacheStats, opts gpaCommandOptions, colorized bool) string {

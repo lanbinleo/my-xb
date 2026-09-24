@@ -12,8 +12,8 @@ func TestAttachTaskDetailMetadataAddsCategoryAndEstimatedWeight(t *testing.T) {
 	scoreB := 80.0
 	inSubjectScore := true
 	tasks := []models.TaskItem{
-		{ID: 1, Name: "Quiz 1", Score: &scoreA, TotalScore: 100, FinishState: 1},
-		{ID: 2, Name: "Quiz 2", Score: &scoreB, TotalScore: 100, FinishState: 1},
+		{ID: 1, Name: "Quiz 1", Score: &scoreA, TotalScore: 100, FinishState: 1, IsSynchroToMobiled: 1},
+		{ID: 2, Name: "Quiz 2", Score: &scoreB, TotalScore: 100, FinishState: 1, IsSynchroToMobiled: 1},
 	}
 	details := map[uint64]*models.SubjectDetail{
 		1: {IsInSubjectScore: true, EvaProjects: []models.TaskEvaluationProject{{ID: 10, EName: "Continuous Assessments"}}},
@@ -42,7 +42,7 @@ func TestAttachTaskDetailMetadataAddsCategoryAndEstimatedWeight(t *testing.T) {
 func TestAttachTaskDetailMetadataSkipsWeightWhenCategoryScoreDoesNotMatchTasks(t *testing.T) {
 	score := 50.0
 	tasks := []models.TaskItem{
-		{ID: 1, Name: "Task", Score: &score, TotalScore: 100, FinishState: 1},
+		{ID: 1, Name: "Task", Score: &score, TotalScore: 100, FinishState: 1, IsSynchroToMobiled: 1},
 	}
 	details := map[uint64]*models.SubjectDetail{
 		1: {IsInSubjectScore: true, EvaProjects: []models.TaskEvaluationProject{{ID: 10, EName: "Project"}}},

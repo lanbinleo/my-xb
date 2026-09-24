@@ -298,3 +298,43 @@ func TestRenderJSONReportsAllowsNaNSubjectValues(t *testing.T) {
 		t.Fatalf("renderJSONReports output missing null score/gpa:\n%s", rendered)
 	}
 }
+
+func TestRenderEstimateNotice(t *testing.T) {
+	if got := renderEstimateNotice(nil, false); got != "" {
+		t.Fatalf("renderEstimateNotice(nil) = %q, want empty", got)
+	}
+
+	got := renderEstimateNotice([]string{"AP Chemistry"}, false)
+	if !strings.Contains(got, "Note: Estimated AP Chemistry from task-level scores") {
+		t.Fatalf("single-subject notice = %q", got)
+	}
+
+	got = renderEstimateNotice([]string{"AP Chemistry", "Linear Algebra"}, false)
+	if !strings.Contains(got, "Estimated 2 subjects") || !strings.Contains(got, "AP Chemistry, Linear Algebra") {
+		t.Fatalf("multi-subject notice = %q", got)
+	}
+}
+
+func TestRenderJSONReportsIncludesEstimatedSubjects(t *testing.T) {
+	reports := []semesterReport{
+		{
+			Semester: models.Semester{ID: 1, Year: 2026, Semester: 1},
+			Result: gpa.CalculatedGPA{
+				WeightedGPA:      4.6,
+				MaxGPA:           4.67,
+				UnweightedGPA:    4.23,
+				UnweightedMaxGPA: 4.3,
+			},
+			EstimatedSubjects: []string{"AP Chemistry"},
+			Subjects:          []gpa.Subject{},
+		},
+	}
+
+	rendered, err := renderJSONReports(reports, gpaCommandOptions{Format: formatJSON})
+	if err != nil {
+		t.Fatalf("renderJSONReports returned error: %v", err)
+	}
+	if !strings.Contains(rendered, `"estimated_from_tasks"`) || !strings.Contains(rendered, "AP Chemistry") {
+		t.Fatalf("renderJSONReports output missing estimated_from_tasks:\n%s", rendered)
+	}
+}
