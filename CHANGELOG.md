@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.3.0 - 2026-10-18
+
+### Features
+
+- Week selectors: `myxb week +1` / `-1` / `next` / `last` / `this` (and `本周`/`上周`), plus `+N`/`-N` day offsets for `myxb day`. On a Saturday/Sunday without classes, `myxb week` and `myxb ics` automatically show/export next week (make-up school days keep the current week; `myxb week this` forces it).
+- `myxb next` now looks ahead up to 14 days once today is over instead of reporting "no classes today", and `myxb now`/`next` show live countdowns (`Ends in 20 min`, `Starts in 2 h 05 min`).
+- Week-grid readability: period blocks carry their bell-schedule start times, back-to-back double periods merge into one cell, empty weekend columns are hidden, long course names are abbreviated before truncation (Chemistry → Chem, Computer Science → CS), and the header labels the week relative to today.
+- New explicit `myxb gpa` command (alias `myxb g`); running bare `myxb` still calculates GPA, and the old root flags (`-t`, `-f`, ...) keep working but now document themselves under `myxb gpa --help`.
+
+### Changes / Bug Fixes
+
+- Routine commands no longer print "Authentication successful!" after the silent saved-credential login; a failed login now suggests re-running `myxb login`.
+- The automatic update notice runs at most once every 24 hours (stamped in `~/.myxb/last_update_check`) instead of hitting GitHub on every command.
+- Off-grid items (clubs, events) listed under the week grid collapse back-to-back sessions of the same item into one time range and show the room.
+
+### Chores
+
+- Added shortcuts `myxb n` (now), `myxb d` (day), and `myxb w` (week).
+- Added regression tests for week offsets, weekend auto-advance, upcoming-entry lookahead, countdown rendering, and course-name abbreviation.
+- Updated README for the new selectors, lookahead behavior, and the `gpa` command.
+
 ## v1.2.3 - 2026-09-24
 
 ### Changes / Bug Fixes

@@ -11,7 +11,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-var version = "1.2.3"
+var version = "1.3.0"
 
 // skipUpdateCheck is set by commands that should not trigger the automatic
 // update notice (update itself, or machine-readable --clean output).
