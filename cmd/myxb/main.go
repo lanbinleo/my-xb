@@ -13,56 +13,39 @@ import (
 
 var version = "1.2.3"
 
+// skipUpdateCheck is set by commands that should not trigger the automatic
+// update notice (update itself, or machine-readable --clean output).
+var skipUpdateCheck bool
+
 func main() {
 	cmd := &cli.Command{
 		Name:    "myxb",
 		Usage:   "GPA Calculator & Score Tracker for Xiaobao",
 		Version: version,
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    "formatted",
-				Aliases: []string{"f"},
-				Usage:   "Output format only: table, plain, markdown, or json (bare -f defaults to table)",
-			},
-			&cli.BoolFlag{
-				Name:    "tasks",
-				Aliases: []string{"t"},
-				Usage:   "Show detailed task information for each subject",
-			},
-			&cli.BoolFlag{
-				Name:  "refresh-cache",
-				Usage: "Rebuild cached task detail metadata used by --tasks",
-			},
-			&cli.BoolFlag{
-				Name:    "clean",
-				Aliases: []string{"c"},
-				Usage:   "Suppress banner, prompts, progress, and other human-oriented output; without --semester, defaults to the current semester",
-			},
-			&cli.StringFlag{
-				Name:    "semester",
-				Aliases: []string{"s"},
-				Usage:   "Select semester(s) without prompts: current, all, index, 2025-1, 2025-2026, or comma-separated combinations",
-			},
-			&cli.StringFlag{
-				Name:    "export",
-				Aliases: []string{"e"},
-				Usage:   "Export output to Desktop by default, or to a provided directory/file path",
-			},
-		},
+		Description: "Running 'myxb' with no command calculates your GPA (same as 'myxb gpa').\n" +
+			"See 'myxb gpa --help' for GPA options and 'myxb week --help' for timetable options.",
+		// Root keeps the GPA flags so 'myxb -t' and friends keep working, but
+		// hides them: they belong to 'myxb gpa --help'.
+		Flags: gpaFlags(true),
 		Action: func(ctx context.Context, c *cli.Command) error {
-			opts, err := parseGPACommandOptions(c)
-			if err != nil {
-				return err
-			}
-			runGPA(opts)
-			return nil
+			return runGPACommand(c)
 		},
 		Commands: append([]*cli.Command{
+			{
+				Name:    "gpa",
+				Aliases: []string{"g"},
+				Usage:   "Calculate GPA and show scores (default when no command is given)",
+				Flags:   gpaFlags(false),
+				Action: func(ctx context.Context, c *cli.Command) error {
+					return runGPACommand(c)
+				},
+			},
 			{
 				Name:    "login",
 				Aliases: []string{"l"},
 				Usage:   "Login and save credentials",
 				Action: func(ctx context.Context, c *cli.Command) error {
+					printBanner(version)
 					runLogin()
 					return nil
 				},
@@ -81,6 +64,8 @@ func main() {
 				Aliases: []string{"u"},
 				Usage:   "Check for updates and update to the latest version",
 				Action: func(ctx context.Context, c *cli.Command) error {
+					skipUpdateCheck = true
+					printBanner(version)
 					runUpdate()
 					return nil
 				},
@@ -88,23 +73,8 @@ func main() {
 			newScheduleCommand(),
 			newAttendanceCommand(),
 		}, newScheduleShortcutCommands()...),
-		Before: func(ctx context.Context, c *cli.Command) (context.Context, error) {
-			opts, err := parseGPACommandOptions(c)
-			if err != nil {
-				return ctx, err
-			}
-			if opts.showHumanChrome() {
-				printBanner(version)
-			}
-			return ctx, nil
-		},
 		After: func(ctx context.Context, c *cli.Command) error {
-			// 自动检查更新（仅在非 update 命令时）
-			opts, err := parseGPACommandOptions(c)
-			if err != nil {
-				return err
-			}
-			if c.Name != "update" && opts.showHumanChrome() {
+			if !skipUpdateCheck {
 				checkForUpdates()
 			}
 			return nil
@@ -115,6 +85,66 @@ func main() {
 		printError(err.Error())
 		os.Exit(1)
 	}
+}
+
+func gpaFlags(hidden bool) []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name:    "formatted",
+			Aliases: []string{"f"},
+			Usage:   "Output format only: table, plain, markdown, or json (bare -f defaults to table)",
+			Hidden:  hidden,
+			Local:   true,
+		},
+		&cli.BoolFlag{
+			Name:    "tasks",
+			Aliases: []string{"t"},
+			Usage:   "Show detailed task information for each subject",
+			Hidden:  hidden,
+			Local:   true,
+		},
+		&cli.BoolFlag{
+			Name:   "refresh-cache",
+			Usage:  "Rebuild cached task detail metadata used by --tasks",
+			Hidden: hidden,
+			Local:  true,
+		},
+		&cli.BoolFlag{
+			Name:    "clean",
+			Aliases: []string{"c"},
+			Usage:   "Suppress banner, prompts, progress, and other human-oriented output; without --semester, defaults to the current semester",
+			Hidden:  hidden,
+			Local:   true,
+		},
+		&cli.StringFlag{
+			Name:    "semester",
+			Aliases: []string{"s"},
+			Usage:   "Select semester(s) without prompts: current, all, index, 2025-1, 2025-2026, or comma-separated combinations",
+			Hidden:  hidden,
+			Local:   true,
+		},
+		&cli.StringFlag{
+			Name:    "export",
+			Aliases: []string{"e"},
+			Usage:   "Export output to Desktop by default, or to a provided directory/file path",
+			Hidden:  hidden,
+			Local:   true,
+		},
+	}
+}
+
+func runGPACommand(c *cli.Command) error {
+	opts, err := parseGPACommandOptions(c)
+	if err != nil {
+		return err
+	}
+	if opts.showHumanChrome() {
+		printBanner(version)
+	} else {
+		skipUpdateCheck = true
+	}
+	runGPA(opts)
+	return nil
 }
 
 func ensureLogin(verbose bool) (*api.API, error) {

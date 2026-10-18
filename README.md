@@ -110,11 +110,12 @@ Export path behavior:
 
 ### Commands
 
-- `myxb` - Calculate GPA (default command)
+- `myxb` - Calculate GPA (default command; same as `myxb gpa`)
+- `myxb gpa` - Calculate GPA and show scores (alias: `myxb g`)
 - `myxb login` - Login and save credentials
-- `myxb week` - Show this week's timetable grid (shortcut for `myxb schedule week`)
-- `myxb now` - Show the class currently in session
-- `myxb next` - Show the next class for today
+- `myxb week` - Show this week's timetable grid (shortcut for `myxb schedule week`; on a class-free weekend it shows next week)
+- `myxb now` - Show the class currently in session (alias: `myxb n`)
+- `myxb next` - Show the next class, looking ahead to later days once today is over
 - `myxb day friday` - Show the timetable for a weekday in the current week
 - `myxb day 2026-04-03` - Show the timetable for a specific date
 - `myxb ics` - Export this week's timetable to an .ics calendar file (regular classes only; add `--all` for everything)
@@ -205,10 +206,11 @@ Useful commands:
 ```bash
 ./myxb week                 # this week's grid (today's column highlighted)
 ./myxb now                  # class in session right now
-./myxb next                 # next class today
+./myxb next                 # next class, up to two weeks ahead once today is over
 ./myxb day friday           # a weekday in the current week
 ./myxb day 2026-04-03       # a specific date
 ./myxb week next            # next week's grid
+./myxb week +1              # also next week; week -1 / week last is last week
 ./myxb day 下周五            # next Friday
 ./myxb schedule -d 周四      # same views via the schedule group
 ./myxb week --refresh
@@ -224,8 +226,11 @@ Notes:
 - ICS exports default to regular classes only (formal blocks 1-8); pass `--all` to also include clubs, events, and off-grid items such as drama
 - ICS event times follow your saved profile (highschool bell schedule or Xiaobao's raw times) and use deterministic UIDs, so re-importing an updated week refreshes the same events instead of duplicating them
 - `myxb schedule` (aliases `s`, `cal`, `calendar`) defaults to the week grid; `myxb day` shows one day's full table with `NOW` / `NEXT` markers and untruncated course names
-- Week-grid cells show the course (and room); long names are truncated to keep the grid readable — use `myxb day <selector>` for full names
-- Selectors accept `YYYY-MM-DD`, English weekdays, Chinese weekdays, `today`, `tomorrow`, `yesterday`, `next <weekday>`, `下周一`-style next-week names, and `next week` / `下周`
+- `myxb now` / `myxb next` show countdowns (`Ends in 20 min`, `Starts in 2 h 05 min`); once today has nothing left, `next` scans up to two weeks ahead for the first class and shows it with its weekday
+- On a Saturday/Sunday without classes, `myxb week` and `myxb ics` automatically show/export next week instead (make-up school days keep the current week); `myxb week this` always forces the current week
+- Week-grid cells show the course (and room); long names are first abbreviated (Chemistry → Chem, Computer Science → CS, ...) and then truncated if still too wide — use `myxb day <selector>` for full names
+- Empty weekend columns are hidden from the week grid unless they hold something (for example 调休 make-up classes); back-to-back double periods render as one merged cell
+- Selectors accept `YYYY-MM-DD`, English weekdays, Chinese weekdays, `today`, `tomorrow`, `yesterday`, `+N`/`-N` (days for `day`, weeks for `week`), `next <weekday>`, `下周一`-style next-week names, and `next week` / `下周` / `last week` / `上周`
 - Without a saved profile, timetable commands default to `standard` and print a hint; set one permanently with `myxb schedule profile standard` or `myxb schedule profile highschool`
 - `myxb schedule profile highschool` adjusts periods 1-8 to the high-school bell schedule:
   - `P1` `08:00-08:40`

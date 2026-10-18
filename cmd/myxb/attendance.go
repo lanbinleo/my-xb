@@ -24,12 +24,10 @@ func newAttendanceCommand() *cli.Command {
 }
 
 func runAttendanceCommand() error {
-	apiClient, err := ensureLogin(true)
+	apiClient, err := ensureLogin(false)
 	if err != nil {
 		return fmt.Errorf("not logged in: run 'myxb login' first")
 	}
-	printSuccess("Authentication successful!")
-	fmt.Println()
 
 	view, err := attendance.NewService(apiClient).GetYearView()
 	if err != nil {

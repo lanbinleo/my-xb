@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
+
+	"myxb/internal/config"
 
 	"github.com/blang/semver"
 	"github.com/rhysd/go-github-selfupdate/selfupdate"
@@ -160,6 +163,10 @@ start /b cmd /c del "%%~f0"
 
 // checkForUpdates checks if an update is available (notification only, does not perform update)
 func checkForUpdates() {
+	if !updateCheckDue() {
+		return
+	}
+
 	verInfo, err := getLatestVersion()
 	if err != nil {
 		// Silent failure, do not display error
@@ -175,4 +182,25 @@ func checkForUpdates() {
 	fmt.Println()
 	printInfo(fmt.Sprintf("New version %s available!", cyan("v"+verInfo.Latest.Version.String())))
 	fmt.Println(gray(fmt.Sprintf("  Run '%s' to update", cyan("myxb update"))))
+}
+
+// updateCheckInterval throttles the automatic update notice so everyday
+// commands like `myxb now` do not pay a GitHub round trip on every run.
+const updateCheckInterval = 24 * time.Hour
+
+// updateCheckDue reports whether the automatic check should run, and stamps
+// the check time when it does. Any filesystem problem falls back to checking.
+func updateCheckDue() bool {
+	dir, err := config.GetConfigDir()
+	if err != nil {
+		return true
+	}
+	stamp := filepath.Join(dir, "last_update_check")
+	if info, err := os.Stat(stamp); err == nil && time.Since(info.ModTime()) < updateCheckInterval {
+		return false
+	}
+	if err := os.MkdirAll(dir, 0755); err == nil {
+		_ = os.WriteFile(stamp, []byte(time.Now().Format(time.RFC3339)), 0644)
+	}
+	return true
 }
