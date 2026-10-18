@@ -87,7 +87,7 @@ func TestRenderScheduleFocusBreaksWhenNoCurrentClass(t *testing.T) {
 		IsToday: true,
 	}
 
-	rendered := renderScheduleFocus(view, focusNow)
+	rendered := renderScheduleFocus(view, focusNow, nil, time.Date(2026, 4, 2, 13, 0, 0, 0, location))
 	if !strings.Contains(rendered, "No class is in session right now.") {
 		t.Fatalf("renderScheduleFocus output = %q, want break message", rendered)
 	}

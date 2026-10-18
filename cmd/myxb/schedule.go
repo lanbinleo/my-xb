@@ -29,6 +29,15 @@ const weekCellMaxWidth = 18
 
 const weekCellEllipsis = "..."
 
+// upcomingLookaheadDays bounds how far now/next search for the next class
+// once today is over (covers weekends and short holidays).
+const upcomingLookaheadDays = 14
+
+const (
+	weekUsage     = "Show the weekly timetable (on a weekend without classes, shows next week)"
+	weekArgsUsage = "[+1 | -1 | next | last | this | YYYY-MM-DD | weekday]"
+)
+
 func newScheduleCommand() *cli.Command {
 	return &cli.Command{
 		Name:    "schedule",
@@ -51,7 +60,7 @@ func newScheduleCommand() *cli.Command {
 			{
 				Name:    "next",
 				Aliases: []string{"ne"},
-				Usage:   "Show the next class for today",
+				Usage:   "Show the next class, looking ahead to later days when today is done",
 				Flags:   scheduleCommonFlags(),
 				Action: func(ctx context.Context, c *cli.Command) error {
 					return runScheduleFocusCommand(c, focusNext)
@@ -70,8 +79,8 @@ func newScheduleCommand() *cli.Command {
 			{
 				Name:      "week",
 				Aliases:   []string{"w"},
-				Usage:     "Show the timetable for a whole week",
-				ArgsUsage: "[date-or-weekday]",
+				Usage:     weekUsage,
+				ArgsUsage: weekArgsUsage,
 				Flags:     scheduleDayFlags(),
 				Action: func(ctx context.Context, c *cli.Command) error {
 					return runScheduleWeekCommand(c, scheduleSelectorArg(c))
@@ -96,16 +105,17 @@ func newScheduleCommand() *cli.Command {
 func newScheduleShortcutCommands() []*cli.Command {
 	return []*cli.Command{
 		{
-			Name:  "now",
-			Usage: "Show the class happening right now (shortcut for 'schedule now')",
-			Flags: scheduleCommonFlags(),
+			Name:    "now",
+			Aliases: []string{"n"},
+			Usage:   "Show the class happening right now (shortcut for 'schedule now')",
+			Flags:   scheduleCommonFlags(),
 			Action: func(ctx context.Context, c *cli.Command) error {
 				return runScheduleFocusCommand(c, focusNow)
 			},
 		},
 		{
 			Name:  "next",
-			Usage: "Show the next class for today (shortcut for 'schedule next')",
+			Usage: "Show the next class, looking ahead to later days (shortcut for 'schedule next')",
 			Flags: scheduleCommonFlags(),
 			Action: func(ctx context.Context, c *cli.Command) error {
 				return runScheduleFocusCommand(c, focusNext)
@@ -113,6 +123,7 @@ func newScheduleShortcutCommands() []*cli.Command {
 		},
 		{
 			Name:      "day",
+			Aliases:   []string{"d"},
 			Usage:     "Show the timetable for a date or weekday (shortcut for 'schedule day')",
 			ArgsUsage: "[date-or-weekday]",
 			Flags:     scheduleDayFlags(),
@@ -122,8 +133,9 @@ func newScheduleShortcutCommands() []*cli.Command {
 		},
 		{
 			Name:      "week",
-			Usage:     "Show the timetable for a date or weekday (shortcut for 'schedule week')",
-			ArgsUsage: "[date-or-weekday]",
+			Aliases:   []string{"w"},
+			Usage:     weekUsage + " (shortcut for 'schedule week')",
+			ArgsUsage: weekArgsUsage,
 			Flags:     scheduleDayFlags(),
 			Action: func(ctx context.Context, c *cli.Command) error {
 				return runScheduleWeekCommand(c, scheduleSelectorArg(c))
@@ -152,7 +164,7 @@ func scheduleDayFlags() []cli.Flag {
 	flags = append(flags, &cli.StringFlag{
 		Name:    "date",
 		Aliases: []string{"d"},
-		Usage:   "Date or weekday to view: YYYY-MM-DD, monday, 周一, today, tomorrow, or 下周五",
+		Usage:   "Date or weekday to view: YYYY-MM-DD, monday, 周一, today, tomorrow, +2, or 下周五",
 	})
 	return flags
 }
@@ -176,7 +188,15 @@ func runScheduleFocusCommand(c *cli.Command, mode focusMode) error {
 		return err
 	}
 
-	fmt.Print(renderScheduleFocus(view, mode))
+	var upcoming *schedule.Entry
+	if view.Next == nil {
+		upcoming, err = service.UpcomingEntry(profile, c.Bool("refresh"), upcomingLookaheadDays)
+		if err != nil {
+			return err
+		}
+	}
+
+	fmt.Print(renderScheduleFocus(view, mode, upcoming, service.Now()))
 	return nil
 }
 
@@ -206,7 +226,13 @@ func runScheduleWeekCommand(c *cli.Command, selector string) error {
 		return err
 	}
 
-	target, err := service.ResolveDay(selector)
+	var target time.Time
+	advanced := false
+	if selector == "" {
+		target, advanced, err = service.DefaultWeekTarget(profile, c.Bool("refresh"))
+	} else {
+		target, err = service.ResolveWeek(selector)
+	}
 	if err != nil {
 		return err
 	}
@@ -216,6 +242,9 @@ func runScheduleWeekCommand(c *cli.Command, selector string) error {
 		return err
 	}
 
+	if advanced {
+		printInfo(gray("No classes this weekend, showing next week (this week: myxb week this)"))
+	}
 	fmt.Print(renderScheduleWeek(view))
 	return nil
 }
@@ -310,12 +339,10 @@ type lazyScheduleProvider struct {
 func newLazyScheduleProvider() *lazyScheduleProvider {
 	return &lazyScheduleProvider{
 		connect: func() (schedule.Provider, error) {
-			apiClient, err := ensureLogin(true)
+			apiClient, err := ensureLogin(false)
 			if err != nil {
-				return nil, fmt.Errorf("login failed: %w", err)
+				return nil, fmt.Errorf("login failed: %w (run 'myxb login' again)", err)
 			}
-			printSuccess("Authentication successful!")
-			fmt.Println()
 			return apiClient, nil
 		},
 	}
@@ -419,48 +446,64 @@ func renderScheduleDay(view schedule.DayView) string {
 	return builder.String()
 }
 
-func renderScheduleFocus(view schedule.DayView, mode focusMode) string {
+// renderScheduleFocus shows the live class and what comes after it. upcoming
+// is the first class on a later day, used once today has nothing left.
+func renderScheduleFocus(view schedule.DayView, mode focusMode, upcoming *schedule.Entry, now time.Time) string {
 	var builder strings.Builder
 
 	builder.WriteString(renderScheduleHeader(view))
 	builder.WriteString("\n")
 
-	switch mode {
-	case focusNext:
-		if view.Next == nil {
-			if view.Current != nil {
-				builder.WriteString(yellow("No later classes today."))
-				builder.WriteString("\n\n")
-				builder.WriteString(renderScheduleCard("NOW", *view.Current, view.Profile, green))
-				return builder.String()
-			}
-
-			builder.WriteString(yellow("No upcoming classes today."))
-			builder.WriteString("\n")
-			return builder.String()
-		}
-
-		builder.WriteString(renderScheduleCard("NEXT", *view.Next, view.Profile, cyan))
-	default:
-		if view.Current != nil {
-			builder.WriteString(renderScheduleCard("NOW", *view.Current, view.Profile, green))
-			if view.Next != nil {
-				builder.WriteString("\n")
-				builder.WriteString(gray("Up next:\n"))
-				builder.WriteString(renderScheduleCard("NEXT", *view.Next, view.Profile, cyan))
-			}
-			return builder.String()
-		}
-
-		builder.WriteString(yellow("No class is in session right now."))
-		builder.WriteString("\n")
-		if view.Next != nil {
-			builder.WriteString("\n")
+	writeNext := func() {
+		switch {
+		case view.Next != nil:
 			builder.WriteString(renderScheduleCard("NEXT", *view.Next, view.Profile, cyan))
+			builder.WriteString(gray("Starts in " + humanDuration(view.Next.Start.Sub(now))))
+			builder.WriteString("\n")
+		case upcoming != nil:
+			builder.WriteString(gray("No more classes today."))
+			builder.WriteString("\n\n")
+			label := "NEXT " + shortWeekdayLabel(upcoming.Start.Weekday()) + " " + upcoming.Start.Format("01-02")
+			builder.WriteString(renderScheduleCard(label, *upcoming, view.Profile, cyan))
+			builder.WriteString(gray("Starts in " + humanDuration(upcoming.Start.Sub(now))))
+			builder.WriteString("\n")
+		default:
+			builder.WriteString(yellow("No upcoming classes found in the next two weeks."))
+			builder.WriteString("\n")
 		}
 	}
 
+	if view.Current != nil {
+		builder.WriteString(renderScheduleCard("NOW", *view.Current, view.Profile, green))
+		builder.WriteString(gray("Ends in " + humanDuration(view.Current.End.Sub(now))))
+		builder.WriteString("\n")
+		builder.WriteString("\n")
+		writeNext()
+		return builder.String()
+	}
+
+	if mode == focusNow {
+		builder.WriteString(yellow("No class is in session right now."))
+		builder.WriteString("\n\n")
+	}
+	writeNext()
 	return builder.String()
+}
+
+// humanDuration renders a coarse countdown such as "23 min", "1 h 05 min",
+// or "2 d 3 h".
+func humanDuration(d time.Duration) string {
+	minutes := int((d + time.Minute - 1) / time.Minute)
+	switch {
+	case minutes < 1:
+		return "less than a minute"
+	case minutes < 60:
+		return fmt.Sprintf("%d min", minutes)
+	case minutes < 24*60:
+		return fmt.Sprintf("%d h %02d min", minutes/60, minutes%60)
+	default:
+		return fmt.Sprintf("%d d %d h", minutes/(24*60), minutes%(24*60)/60)
+	}
 }
 
 func renderScheduleSummary(view schedule.DayView) string {
@@ -529,34 +572,54 @@ func renderScheduleWeek(view schedule.WeekView) string {
 
 	end := view.Begin.AddDate(0, 0, 6)
 	builder.WriteString(bold(cyan(view.Begin.Format("2006-01-02") + " ~ " + end.Format("2006-01-02"))))
+	if label := weekRelativeLabel(view); label != "" {
+		builder.WriteString(" ")
+		builder.WriteString(gray(label))
+	}
 	builder.WriteString("\n")
 	builder.WriteString(gray("Profile: "))
 	builder.WriteString(cyan(schedule.ProfileLabel(view.Profile)))
 	builder.WriteString("\n\n")
 
+	// Weekend columns only appear when they hold something (e.g. 调休).
+	days := make([]int, 0, len(view.Days))
+	for idx := range view.Days {
+		weekday := view.Days[idx].Date.Weekday()
+		if (weekday == time.Saturday || weekday == time.Sunday) && !dayHasRealEntries(view.Days[idx]) {
+			continue
+		}
+		days = append(days, idx)
+	}
+
 	t := table.NewWriter()
 	t.SetStyle(table.StyleRounded)
+	t.Style().Format.Header = text.FormatDefault
+	// Row separators make merged double periods read as one block.
+	t.Style().Options.SeparateRows = true
 
 	header := table.Row{"Block"}
-	var columnConfigs []table.ColumnConfig
-	for idx := range view.Days {
+	columnConfigs := []table.ColumnConfig{{Number: 1, Colors: text.Colors{text.FgHiBlack}}}
+	for column, idx := range days {
 		day := view.Days[idx]
-		header = append(header, shortWeekdayLabel(day.Date.Weekday())+"\n"+day.Date.Format("01-02"))
+		header = append(header, shortWeekdayLabel(day.Date.Weekday())+" "+day.Date.Format("01-02"))
+		config := table.ColumnConfig{Number: column + 2, AutoMerge: true}
 		if view.Today == &view.Days[idx] {
 			// Highlight today via go-pretty's own colors so the escape
 			// sequences stay width-transparent to the table layout.
-			columnConfigs = append(columnConfigs, table.ColumnConfig{
-				Number:       idx + 2,
-				ColorsHeader: text.Colors{text.FgCyan, text.Bold},
-			})
+			config.ColorsHeader = text.Colors{text.FgCyan, text.Bold}
 		}
+		columnConfigs = append(columnConfigs, config)
 	}
 	t.SetColumnConfigs(columnConfigs)
 	t.AppendHeader(header)
 
 	for order := 1; order <= 8; order++ {
-		row := table.Row{schedule.Entry{Order: order}.BlockLabel(view.Profile)}
-		for idx := range view.Days {
+		label := schedule.Entry{Order: order}.BlockLabel(view.Profile)
+		if start, _, ok := schedule.BlockTime(order, view.Profile); ok {
+			label += " " + start
+		}
+		row := table.Row{label}
+		for _, idx := range days {
 			row = append(row, weekCell(view.Days[idx], order))
 		}
 		t.AppendRow(row)
@@ -568,6 +631,31 @@ func renderScheduleWeek(view schedule.WeekView) string {
 	return builder.String()
 }
 
+// weekRelativeLabel names the week relative to today.
+func weekRelativeLabel(view schedule.WeekView) string {
+	switch view.Offset {
+	case 0:
+		return "(this week)"
+	case 1:
+		return "(next week)"
+	case -1:
+		return "(last week)"
+	default:
+		return fmt.Sprintf("(%+d weeks)", view.Offset)
+	}
+}
+
+func dayHasRealEntries(day schedule.DayView) bool {
+	for _, entry := range day.Entries {
+		if !entry.IsFreeBlock {
+			return true
+		}
+	}
+	return false
+}
+
+// weekCell renders one grid cell. Consecutive identical cells in a column are
+// merged by the table, so a double period shows up once.
 func weekCell(day schedule.DayView, order int) string {
 	var lines []string
 	for _, entry := range day.Entries {
@@ -575,14 +663,14 @@ func weekCell(day schedule.DayView, order int) string {
 			continue
 		}
 
-		name := truncateForWeekCell(asciiDisplayText(entry.CourseName()))
+		name := truncateForWeekCell(abbreviateCourseName(asciiDisplayText(entry.CourseName())))
 		switch {
 		case isSameEntry(day.Current, entry):
-			name = bold(green(name))
+			name = bold(green("> " + name))
 		case entry.ScheduleType == 3:
 			name = magenta(name)
 		case entry.ScheduleType != 4:
-			name = blue(name)
+			name = yellow(name)
 		}
 		lines = append(lines, name)
 
@@ -592,26 +680,43 @@ func weekCell(day schedule.DayView, order int) string {
 	}
 
 	if len(lines) == 0 {
-		return gray("Free")
+		return gray("-")
 	}
 	return strings.Join(lines, "\n")
 }
 
 // renderWeekOtherItems lists entries without a formal period slot (order 0 or
-// beyond 8) that cannot fit the period grid.
+// beyond 8) that cannot fit the period grid. Back-to-back sessions of the same
+// item on one day collapse into a single time range.
 func renderWeekOtherItems(view schedule.WeekView) string {
 	lines := make([]string, 0)
 	for idx := range view.Days {
 		day := view.Days[idx]
+		var items []schedule.Entry
 		for _, entry := range day.Entries {
 			if entry.IsFreeBlock || (entry.Order >= 1 && entry.Order <= 8) {
 				continue
 			}
-			lines = append(lines, fmt.Sprintf("%s %s %s",
-				gray(day.Date.Format("01-02")),
+			if last := len(items) - 1; last >= 0 && items[last].CourseName() == entry.CourseName() &&
+				!entry.Start.After(items[last].End.Add(15*time.Minute)) {
+				if entry.End.After(items[last].End) {
+					items[last].End = entry.End
+				}
+				continue
+			}
+			items = append(items, entry)
+		}
+
+		for _, entry := range items {
+			line := fmt.Sprintf("  %s %s  %s",
+				gray(shortWeekdayLabel(day.Date.Weekday())+" "+day.Date.Format("01-02")),
 				entry.TimeRange(),
 				asciiDisplayText(entry.CourseName()),
-			))
+			)
+			if room := asciiDisplayText(entry.Location); room != "" {
+				line += gray(" @ " + room)
+			}
+			lines = append(lines, line)
 		}
 	}
 	if len(lines) == 0 {
@@ -619,6 +724,7 @@ func renderWeekOtherItems(view schedule.WeekView) string {
 	}
 
 	var builder strings.Builder
+	builder.WriteString("\n")
 	builder.WriteString(yellow("Other items:"))
 	builder.WriteString("\n")
 	builder.WriteString(strings.Join(lines, "\n"))
@@ -626,11 +732,67 @@ func renderWeekOtherItems(view schedule.WeekView) string {
 	return builder.String()
 }
 
+// courseNameReplacements shortens common long words so week-grid cells keep
+// the distinguishing part of a course name visible.
+var courseNameReplacements = []struct{ long, short string }{
+	{"Literature and Composition", "Lit"},
+	{"Language and Composition", "Lang"},
+	{"Literature", "Lit"},
+	{"Language", "Lang"},
+	{"Composition", "Comp"},
+	{"English", "Eng"},
+	{"Chemistry", "Chem"},
+	{"Physics", "Phys"},
+	{"Biology", "Bio"},
+	{"Mathematics", "Math"},
+	{"Statistics", "Stats"},
+	{"Calculus", "Calc"},
+	{"Psychology", "Psych"},
+	{"Economics", "Econ"},
+	{"Macroeconomics", "Macro"},
+	{"Microeconomics", "Micro"},
+	{"Computer Science", "CS"},
+	{"Linear Algebra", "Lin Alg"},
+	{"Multivariable", "Multivar"},
+	{"Culture", "Cult"},
+	{"History", "Hist"},
+	{"Government", "Gov"},
+	{"Geography", "Geo"},
+	{"Environmental", "Env"},
+	{"Science", "Sci"},
+	{"Physical Education", "PE"},
+	{" and ", " & "},
+}
+
+// abbreviateCourseName applies the replacements only when the name would not
+// fit a week cell, so short names stay untouched.
+func abbreviateCourseName(name string) string {
+	if displayWidth(name) <= weekCellMaxWidth {
+		return name
+	}
+	for _, r := range courseNameReplacements {
+		name = strings.ReplaceAll(name, r.long, r.short)
+	}
+	return name
+}
+
+func displayWidth(text string) int {
+	width := 0
+	for _, r := range text {
+		if isWideRune(r) {
+			width += 2
+		} else {
+			width++
+		}
+	}
+	return width
+}
+
 // truncateForWeekCell keeps week-grid cells narrow, cutting on a display-width
 // budget so CJK names are truncated fairly. ASCII names prefer a word
 // boundary when one sits near the cut.
 func truncateForWeekCell(text string) string {
-	if text == "" {
+	if displayWidth(text) <= weekCellMaxWidth {
 		return text
 	}
 

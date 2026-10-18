@@ -310,3 +310,99 @@ func mustSchoolTime(t *testing.T, value string) time.Time {
 
 	return parsed
 }
+
+func TestResolveWeekSupportsRelativeOffsets(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatalf("LoadLocation returned error: %v", err)
+	}
+	now := time.Date(2026, 4, 1, 9, 0, 0, 0, location) // Wednesday
+
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{input: "+1", want: "2026-04-06"},
+		{input: "-1", want: "2026-03-23"},
+		{input: "+2", want: "2026-04-13"},
+		{input: "this", want: "2026-04-01"},
+		{input: "本周", want: "2026-04-01"},
+		{input: "last", want: "2026-03-23"},
+		{input: "上周", want: "2026-03-23"},
+		{input: "next", want: "2026-04-06"},
+		{input: "friday", want: "2026-04-03"},
+	}
+	for _, tt := range tests {
+		got, err := ResolveWeek(tt.input, now, location)
+		if err != nil {
+			t.Fatalf("ResolveWeek(%q) returned error: %v", tt.input, err)
+		}
+		if got.Format(dateLayout) != tt.want {
+			t.Fatalf("ResolveWeek(%q) = %s, want %s", tt.input, got.Format(dateLayout), tt.want)
+		}
+	}
+
+	// For day views +N counts days.
+	got, err := ResolveDay("+2", now, location)
+	if err != nil || got.Format(dateLayout) != "2026-04-03" {
+		t.Fatalf("ResolveDay(+2) = %v, %v, want 2026-04-03", got, err)
+	}
+	if _, err := ResolveWeek("+x", now, location); err == nil {
+		t.Fatalf("ResolveWeek(+x) should fail")
+	}
+}
+
+func TestDefaultWeekTargetAdvancesOnClasslessWeekend(t *testing.T) {
+	saturday := mustSchoolTime(t, "2026-04-04T10:00:00")
+	service := NewServiceWithDependencies(&fakeProvider{}, &memoryCache{}, func() time.Time { return saturday }, "alice")
+
+	target, advanced, err := service.DefaultWeekTarget(config.ScheduleProfileStandard, false)
+	if err != nil {
+		t.Fatalf("DefaultWeekTarget returned error: %v", err)
+	}
+	if !advanced || target.Format(dateLayout) != "2026-04-06" {
+		t.Fatalf("DefaultWeekTarget = %s, %v, want 2026-04-06, true", target.Format(dateLayout), advanced)
+	}
+	view, err := service.GetWeekView(target, config.ScheduleProfileStandard, false)
+	if err != nil || view.Offset != 1 {
+		t.Fatalf("next week view offset = %d, %v, want 1", view.Offset, err)
+	}
+}
+
+func TestDefaultWeekTargetKeepsMakeUpSchoolDay(t *testing.T) {
+	saturday := mustSchoolTime(t, "2026-04-04T07:00:00")
+	provider := &fakeProvider{items: []models.ScheduleItem{
+		{ID: 1, Name: "AP Statistics", BeginTime: "2026-04-04T08:25:00", EndTime: "2026-04-04T09:05:00", FormalCourseOrder: 1, ScheduleType: 4},
+	}}
+	service := NewServiceWithDependencies(provider, &memoryCache{}, func() time.Time { return saturday }, "alice")
+
+	target, advanced, err := service.DefaultWeekTarget(config.ScheduleProfileStandard, false)
+	if err != nil {
+		t.Fatalf("DefaultWeekTarget returned error: %v", err)
+	}
+	if advanced || target.Format(dateLayout) != "2026-04-04" {
+		t.Fatalf("DefaultWeekTarget = %s, %v, want 2026-04-04, false", target.Format(dateLayout), advanced)
+	}
+
+	weekday := mustSchoolTime(t, "2026-04-01T20:00:00")
+	service = NewServiceWithDependencies(&fakeProvider{}, &memoryCache{}, func() time.Time { return weekday }, "alice")
+	if _, advanced, _ := service.DefaultWeekTarget(config.ScheduleProfileStandard, false); advanced {
+		t.Fatalf("DefaultWeekTarget should not advance on a weekday")
+	}
+}
+
+func TestUpcomingEntrySearchesAcrossWeeks(t *testing.T) {
+	saturday := mustSchoolTime(t, "2026-04-04T10:00:00")
+	provider := &fakeProvider{items: []models.ScheduleItem{
+		{ID: 9, Name: "AP English", BeginTime: "2026-04-06T09:15:00", EndTime: "2026-04-06T09:55:00", FormalCourseOrder: 2, ScheduleType: 4},
+	}}
+	service := NewServiceWithDependencies(provider, &memoryCache{}, func() time.Time { return saturday }, "alice")
+
+	entry, err := service.UpcomingEntry(config.ScheduleProfileStandard, false, 14)
+	if err != nil {
+		t.Fatalf("UpcomingEntry returned error: %v", err)
+	}
+	if entry == nil || entry.ID != 9 {
+		t.Fatalf("UpcomingEntry = %+v, want ID 9", entry)
+	}
+}

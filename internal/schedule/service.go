@@ -124,6 +124,8 @@ type WeekView struct {
 	Profile string
 	Days    []DayView
 	Today   *DayView
+	// Offset counts weeks from the current week (0 = this week, 1 = next).
+	Offset int
 }
 
 // ProfileLabel renders a friendly label for the saved schedule profile.
@@ -191,6 +193,70 @@ func (s *Service) ResolveDay(input string) (time.Time, error) {
 	return ResolveDay(input, s.now(), s.location)
 }
 
+// ResolveWeek parses a week selector: +N/-N weeks from this week, "this",
+// "last", or anything ResolveDay understands.
+func (s *Service) ResolveWeek(input string) (time.Time, error) {
+	return ResolveWeek(input, s.now(), s.location)
+}
+
+// Now returns the current time in the school timezone.
+func (s *Service) Now() time.Time {
+	return s.now().In(s.location)
+}
+
+// DefaultWeekTarget picks the week shown when no selector is given: this
+// week, or next week on a Saturday/Sunday without classes. Weekend make-up
+// school days (调休) keep the current week. The bool reports the advance.
+func (s *Service) DefaultWeekTarget(profile string, refresh bool) (time.Time, bool, error) {
+	today := s.Today()
+	if weekday := today.Weekday(); weekday != time.Saturday && weekday != time.Sunday {
+		return today, false, nil
+	}
+
+	view, err := s.GetDayView(today, profile, refresh)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	if nextRealEntry(view.Entries) != nil {
+		return today, false, nil
+	}
+
+	return startOfWeek(today).AddDate(0, 0, 7), true, nil
+}
+
+// UpcomingEntry finds the first real entry on a later day than today,
+// scanning up to the given number of days ahead.
+func (s *Service) UpcomingEntry(profile string, refresh bool, days int) (*Entry, error) {
+	today := s.Today()
+	thisWeek := startOfWeek(today).Format(dateLayout)
+	weeks := make(map[string][]models.ScheduleItem)
+
+	for offset := 1; offset <= days; offset++ {
+		day := today.AddDate(0, 0, offset)
+		key := startOfWeek(day).Format(dateLayout)
+		items, ok := weeks[key]
+		if !ok {
+			// Today's week was already fetched (and refreshed) by the caller.
+			fetched, err := s.fetchWeek(day, refresh && key != thisWeek)
+			if err != nil {
+				return nil, err
+			}
+			items = fetched
+			weeks[key] = items
+		}
+
+		entries, err := s.entriesForDay(items, day, profile)
+		if err != nil {
+			return nil, err
+		}
+		if entry := nextRealEntry(entries); entry != nil {
+			return entry, nil
+		}
+	}
+
+	return nil, nil
+}
+
 // Today returns the current school date at midnight.
 func (s *Service) Today() time.Time {
 	return startOfDay(s.now().In(s.location))
@@ -219,6 +285,7 @@ func (s *Service) GetWeekView(target time.Time, profile string, refresh bool) (W
 		Begin:   begin,
 		Profile: normalizedProfile(profile),
 		Days:    make([]DayView, 0, 7),
+		Offset:  int(begin.Sub(startOfWeek(now)).Round(24*time.Hour).Hours()) / (24 * 7),
 	}
 
 	for offset := 0; offset < 7; offset++ {
@@ -277,6 +344,12 @@ func ResolveDay(input string, now time.Time, location *time.Location) (time.Time
 	if value == "nextweek" || value == "next week" || value == "next" || value == "下周" {
 		return startOfWeek(now).AddDate(0, 0, 7), nil
 	}
+	if value == "lastweek" || value == "last week" || value == "last" || value == "上周" {
+		return startOfWeek(now).AddDate(0, 0, -7), nil
+	}
+	if offset, ok := parseSignedOffset(value); ok {
+		return startOfDay(now).AddDate(0, 0, offset), nil
+	}
 
 	if parsed, err := time.ParseInLocation(dateLayout, input, location); err == nil {
 		return startOfDay(parsed), nil
@@ -295,7 +368,42 @@ func ResolveDay(input string, now time.Time, location *time.Location) (time.Time
 		return day, nil
 	}
 
-	return time.Time{}, fmt.Errorf("invalid day selector %q: use YYYY-MM-DD, today, tomorrow, yesterday, monday, 下周五, or next week", input)
+	return time.Time{}, fmt.Errorf("invalid day selector %q: use YYYY-MM-DD, today, tomorrow, +2, monday, 下周五, or next week", input)
+}
+
+// ResolveWeek is ResolveDay for week views: +N/-N count weeks instead of
+// days, and "this"/"本周" name the current week.
+func ResolveWeek(input string, now time.Time, location *time.Location) (time.Time, error) {
+	if location == nil {
+		location = schoolLocation()
+	}
+
+	value := strings.TrimSpace(strings.ToLower(input))
+	switch value {
+	case "this", "this week", "本周", "这周":
+		return startOfDay(now.In(location)), nil
+	}
+	if offset, ok := parseSignedOffset(value); ok {
+		return startOfWeek(now.In(location)).AddDate(0, 0, 7*offset), nil
+	}
+
+	return ResolveDay(input, now, location)
+}
+
+// parseSignedOffset accepts "+N" or "-N" (an explicit sign is required so a
+// bare number is never mistaken for a date).
+func parseSignedOffset(value string) (int, bool) {
+	if len(value) < 2 || (value[0] != '+' && value[0] != '-') {
+		return 0, false
+	}
+	var offset int
+	if _, err := fmt.Sscanf(value[1:], "%d", &offset); err != nil || fmt.Sprint(offset) != value[1:] {
+		return 0, false
+	}
+	if value[0] == '-' {
+		offset = -offset
+	}
+	return offset, true
 }
 
 // parseWeekdaySelector resolves a weekday alias, reporting whether the
@@ -563,6 +671,16 @@ func fillFreeBlocks(entries []Entry, date time.Time, profile string) []Entry {
 	}
 
 	return filled
+}
+
+// BlockTime returns the bell-schedule start/end ("08:00") of a period for the
+// profile. Standard profile times are the typical slots used for free blocks.
+func BlockTime(order int, profile string) (string, string, bool) {
+	start, end, ok := blockTimeRange(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC), order, profile)
+	if !ok {
+		return "", "", false
+	}
+	return start.Format("15:04"), end.Format("15:04"), true
 }
 
 func blockTimeRange(date time.Time, order int, profile string) (time.Time, time.Time, bool) {

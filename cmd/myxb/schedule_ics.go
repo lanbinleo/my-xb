@@ -18,7 +18,7 @@ func newScheduleICSCommand() *cli.Command {
 		Name:      "ics",
 		Aliases:   []string{"i"},
 		Usage:     "Export a week of the timetable as an .ics calendar file",
-		ArgsUsage: "[date-or-weekday]",
+		ArgsUsage: weekArgsUsage,
 		Flags:     scheduleICSFlags(),
 		Action: func(ctx context.Context, c *cli.Command) error {
 			return runScheduleICSCommand(c, scheduleSelectorArg(c))
@@ -57,7 +57,12 @@ func runScheduleICSCommand(c *cli.Command, selector string) error {
 		return err
 	}
 
-	target, err := service.ResolveDay(selector)
+	var target time.Time
+	if selector == "" {
+		target, _, err = service.DefaultWeekTarget(profile, c.Bool("refresh"))
+	} else {
+		target, err = service.ResolveWeek(selector)
+	}
 	if err != nil {
 		return err
 	}

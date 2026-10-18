@@ -90,12 +90,44 @@ func TestRenderScheduleFocusNextMode(t *testing.T) {
 		IsToday: true,
 	}
 
-	rendered := renderScheduleFocus(view, focusNext)
-	if !strings.Contains(rendered, "No later classes today.") {
-		t.Fatalf("focusNext output = %q, want no-later-classes message", rendered)
+	upcoming := schedule.Entry{
+		ID:           2,
+		Name:         "AP Chemistry",
+		ScheduleType: 4,
+		Order:        1,
+		Start:        time.Date(2026, 4, 3, 8, 0, 0, 0, location),
+		End:          time.Date(2026, 4, 3, 8, 40, 0, 0, location),
 	}
-	if !strings.Contains(rendered, "NOW") {
-		t.Fatalf("focusNext output = %q, want fallback NOW card", rendered)
+	now := time.Date(2026, 4, 2, 9, 0, 0, 0, location)
+
+	rendered := renderScheduleFocus(view, focusNext, &upcoming, now)
+	for _, want := range []string{"NOW", "Ends in 20 min", "No more classes today.", "NEXT 周五 04-03", "AP Chemistry", "Starts in 23 h 00 min"} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("focusNext output missing %q:\n%s", want, rendered)
+		}
+	}
+
+	rendered = renderScheduleFocus(view, focusNext, nil, now)
+	if !strings.Contains(rendered, "No upcoming classes found") {
+		t.Fatalf("focusNext output = %q, want no-upcoming message", rendered)
+	}
+}
+
+func TestHumanDuration(t *testing.T) {
+	tests := []struct {
+		in   time.Duration
+		want string
+	}{
+		{in: 30 * time.Second, want: "1 min"},
+		{in: 0, want: "less than a minute"},
+		{in: 23 * time.Minute, want: "23 min"},
+		{in: 65 * time.Minute, want: "1 h 05 min"},
+		{in: 51 * time.Hour, want: "2 d 3 h"},
+	}
+	for _, tt := range tests {
+		if got := humanDuration(tt.in); got != tt.want {
+			t.Fatalf("humanDuration(%s) = %q, want %q", tt.in, got, tt.want)
+		}
 	}
 }
 
@@ -105,7 +137,7 @@ func TestRenderScheduleWeekGridAndOtherItems(t *testing.T) {
 	monday := time.Date(2026, 4, 6, 0, 0, 0, 0, location)
 	current := schedule.Entry{
 		ID:           7,
-		Name:         "高等数学与线性代数",
+		Name:         "高等数学与线性代数基础",
 		ScheduleType: 4,
 		Order:        2,
 		Start:        time.Date(2026, 4, 6, 8, 40, 0, 0, location),
@@ -149,10 +181,13 @@ func TestRenderScheduleWeekGridAndOtherItems(t *testing.T) {
 	}
 
 	rendered := renderScheduleWeek(view)
-	for _, want := range []string{"2026-04-06 ~ 2026-04-12", "周一", "周日", "Free", "Robotics Club", "Assembly", "Other items:"} {
+	for _, want := range []string{"2026-04-06 ~ 2026-04-12", "(this week)", "周一", "周五", "P1 08:00", "Robotics Club", "Assembly", "Other items:"} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("renderScheduleWeek output missing %q:\n%s", want, rendered)
 		}
+	}
+	if strings.Contains(rendered, "周日") || strings.Contains(rendered, "Free") {
+		t.Fatalf("renderScheduleWeek should hide empty weekend columns and Free labels:\n%s", rendered)
 	}
 	if !strings.Contains(rendered, "高等数学与线性...") {
 		t.Fatalf("renderScheduleWeek output should truncate wide CJK names:\n%s", rendered)
@@ -172,13 +207,33 @@ func TestTruncateForWeekCell(t *testing.T) {
 		{input: "AP Physics C Mechanics", want: "AP Physics C..."},
 		{input: "AP English Literature and Composition", want: "AP English..."},
 		{input: "Chinese Culture & Literature", want: "Chinese Culture..."},
-		{input: "高等数学与线性代数", want: "高等数学与线性..."},
+		{input: "Exactly Eighteen C", want: "Exactly Eighteen C"},
+		{input: "高等数学与线性代数", want: "高等数学与线性代数"},
+		{input: "高等数学与线性代数基础", want: "高等数学与线性..."},
 		{input: "化学", want: "化学"},
 	}
 
 	for _, tt := range tests {
 		if got := truncateForWeekCell(tt.input); got != tt.want {
 			t.Fatalf("truncateForWeekCell(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestAbbreviateCourseName(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{input: "AP Chemistry", want: "AP Chemistry"},
+		{input: "Linear Algebra", want: "Linear Algebra"},
+		{input: "AP English Literature and Composition", want: "AP Eng Lit"},
+		{input: "Chinese Culture & Literature", want: "Chinese Cult & Lit"},
+		{input: "AP Computer Science A", want: "AP CS A"},
+	}
+	for _, tt := range tests {
+		if got := abbreviateCourseName(tt.input); got != tt.want {
+			t.Fatalf("abbreviateCourseName(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
 }
